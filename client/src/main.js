@@ -6,7 +6,7 @@ import { FeedbackSystem } from './feedback.js';
 import { Minimap } from './minimap.js';
 import { Progression } from './progression.js';
 import { getWeaponByKey, getWeaponById } from './weapons.js';
-import { generateMap, mapData, grid, GRID_SIZE, CELL_SIZE, OFFSET } from '../../shared/map.js';
+import { generateMap, mapData, grid, GRID_SIZE, CELL_SIZE, OFFSET, jumpPads } from '../../shared/map.js';
 
 // Configuração do Jogador Local
 const localPlayer = {
@@ -23,6 +23,7 @@ const localPlayer = {
   isSliding: false,
   slideTimer: 0,
   slideCooldown: 0,
+  dashCooldown: 0,
   fireCooldown: 0,
   vX: 0,
   vY: 0,
@@ -47,6 +48,7 @@ let isPlaying = false;
 let lobbyTime = 0;
 let lastTime = performance.now();
 let serverEntities = {};
+let serverMedkits = [];
 
 // Systems
 let feedback;
@@ -97,6 +99,7 @@ function connectBackground() {
 
     channel.on('stateUpdate', state => {
       serverEntities = { ...state.players, ...state.bots };
+      serverMedkits = state.medkits || [];
       engine.updateEntities(state);
       if (isPlaying) {
         updateScoreboard(serverEntities);
@@ -133,11 +136,19 @@ function connectBackground() {
       feedback.showDamageIndicator(angle);
     });
 
+    channel.on('heal', data => {
+      if (!isPlaying) return;
+      localPlayer.hp = Math.min(100, localPlayer.hp + data.amount);
+      uiHp.innerText = Math.floor(localPlayer.hp);
+      // Optional: Add a green flash or sound here
+    });
+
     channel.on('killfeed', data => {
       if (!isPlaying) return;
+      const rank = getPlayerRank(data.attackerKills || 0);
       const feed = document.getElementById('killfeed');
       const p = document.createElement('p');
-      p.innerText = `${data.msg} [${data.weapon}]${data.headshot ? ' (HS)' : ''}`;
+      p.innerHTML = `<span style="color:${rank.color}; font-weight: bold;">${rank.name}</span> ${data.msg} [${data.weapon}]${data.headshot ? ' (HS)' : ''}`;
       feed.appendChild(p);
       setTimeout(() => {
         if (p.parentNode) feed.removeChild(p);
@@ -248,6 +259,38 @@ function handleInputAndMovement(deltaTime) {
     dirZ /= length;
   }
 
+  // Dash UI update
+  const uiDash = document.getElementById('ui-dash');
+  if (localPlayer.dashCooldown > 0) {
+    localPlayer.dashCooldown -= deltaTime;
+    if (uiDash) {
+      uiDash.innerText = localPlayer.dashCooldown.toFixed(1) + 's';
+      uiDash.style.color = '#ff0033';
+    }
+  } else if (uiDash && uiDash.innerText !== 'RDY') {
+    uiDash.innerText = 'RDY';
+    uiDash.style.color = '#00ff66';
+  }
+
+  // Dash Mechanic (Q or E)
+  if (localPlayer.dashCooldown <= 0 && localPlayer.isGrounded) {
+    let dashed = false;
+    let dashDirX = 0;
+    if (Input.isJustPressed('q')) {
+      dashDirX = -1; dashed = true;
+    } else if (Input.isJustPressed('e')) {
+      dashDirX = 1; dashed = true;
+    }
+
+    if (dashed) {
+      localPlayer.dashCooldown = 3.0; // 3 seconds cooldown
+      const right = new THREE.Vector3(Math.cos(localPlayer.rY), 0, -Math.sin(localPlayer.rY));
+      const boost = new THREE.Vector3().addScaledVector(right, dashDirX).normalize().multiplyScalar(40);
+      localPlayer.vX = boost.x;
+      localPlayer.vZ = boost.z;
+    }
+  }
+
   // Camera Tilt (Roll) baseado no Strafe
   const targetTilt = dirX * -0.04;
   engine.camera.rotation.z = THREE.MathUtils.lerp(engine.camera.rotation.z, targetTilt, deltaTime * 10);
@@ -319,6 +362,15 @@ function handleInputAndMovement(deltaTime) {
     localPlayer.y = 1.0;
     localPlayer.vY = 0;
     localPlayer.isGrounded = true;
+    
+    // Jump Pad check
+    for (const jp of jumpPads) {
+      if (Math.abs(localPlayer.x - jp.x) < 1.0 && Math.abs(localPlayer.z - jp.z) < 1.0) {
+        localPlayer.vY = 35; // Boing!
+        localPlayer.isGrounded = false;
+        break;
+      }
+    }
   }
 
   const moveVectorX = localPlayer.vX * deltaTime;
@@ -424,6 +476,14 @@ function reload() {
   }, localPlayer.weapon.reloadTime * 1000);
 }
 
+function getPlayerRank(kills) {
+  if (kills >= 50) return { name: '[HACKER]', color: '#ff00ff' };
+  if (kills >= 20) return { name: '[OURO]', color: '#ffcc00' };
+  if (kills >= 10) return { name: '[PRATA]', color: '#cccccc' };
+  if (kills >= 5) return { name: '[BRONZE]', color: '#cd7f32' };
+  return { name: '[FERRO]', color: '#888888' };
+}
+
 function updateScoreboard(entities) {
   const tbody = document.getElementById('scoreboard-tbody');
   if (!tbody) return;
@@ -434,12 +494,19 @@ function updateScoreboard(entities) {
 
   tbody.innerHTML = '';
   playersArray.forEach((p, idx) => {
+    const kills = p.kills || 0;
+    const deaths = p.deaths || 0;
+    const kd = (kills / Math.max(1, deaths)).toFixed(2);
+    const rank = getPlayerRank(kills);
+    
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td style="color: ${rank.color}; font-weight: bold;">${rank.name}</td>
       <td>#${idx + 1}</td>
       <td>${p.nickname || (p.isBot ? 'BOT' : 'Operador')}</td>
-      <td>${p.kills || 0}</td>
-      <td>${p.deaths || 0}</td>
+      <td>${kills}</td>
+      <td>${deaths}</td>
+      <td>${kd}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -511,6 +578,8 @@ function gameLoop(now) {
     handleInputAndMovement(deltaTime);
     handleCombat(deltaTime);
     
+    engine.updateMedkits(serverMedkits, deltaTime);
+
     if (feedback) feedback.update(deltaTime);
     if (progression) progression.update(deltaTime);
     if (minimap) minimap.update(localPlayer, serverEntities);

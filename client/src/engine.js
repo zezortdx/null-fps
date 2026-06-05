@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mapData, GRID_SIZE, CELL_SIZE, OFFSET } from '../../shared/map.js';
+import { mapData, GRID_SIZE, CELL_SIZE, OFFSET, jumpPads } from '../../shared/map.js';
 import { createWeaponModel } from './weapons.js';
 
 export class Engine {
@@ -26,6 +26,10 @@ export class Engine {
     this.particles = [];
     this.decals = [];
     this.tracers = [];
+    
+    this.medkits = {};
+    this.medkitGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+    this.medkitMat = new THREE.MeshLambertMaterial({ color: 0x00ff66, emissive: 0x002200 });
     
     // Will hold the current weapon model
     this.weaponGroup = new THREE.Group();
@@ -153,6 +157,25 @@ export class Engine {
     this.gridHelper = gridHelper;
 
     if (mapData && mapData.length > 0) {
+      // Jump Pads
+      const jpGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.2, 16);
+      const jpMat = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+      
+      for (const jp of jumpPads) {
+        const mesh = new THREE.Mesh(jpGeo, jpMat);
+        mesh.position.set(jp.x, 0.1, jp.z);
+        
+        // Halo effect
+        const haloGeo = new THREE.RingGeometry(0.9, 1.2, 16);
+        const haloMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+        const halo = new THREE.Mesh(haloGeo, haloMat);
+        halo.rotation.x = -Math.PI / 2;
+        halo.position.set(jp.x, 0.11, jp.z);
+        
+        this.scene.add(mesh);
+        this.scene.add(halo);
+      }
+
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
       const boxMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
 
@@ -318,6 +341,38 @@ export class Engine {
           this.updateHPBar(group.userData.hpBar, serverEnt.hp);
         }
       }
+    }
+  }
+
+  updateMedkits(medkitsList, deltaTime) {
+    if (this.qualityLevel === 'POTATO') {
+      if (this.medkitMat.isMeshLambertMaterial) {
+        this.medkitMat = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
+      }
+    }
+    
+    const currentIds = medkitsList.map(m => m.id);
+    
+    for (const id in this.medkits) {
+      if (!currentIds.includes(parseInt(id))) {
+        this.scene.remove(this.medkits[id]);
+        delete this.medkits[id];
+      }
+    }
+
+    for (const mk of medkitsList) {
+      if (!this.medkits[mk.id]) {
+        const mesh = new THREE.Mesh(this.medkitGeo, this.medkitMat);
+        mesh.position.set(mk.x, 0.5, mk.z);
+        mesh.castShadow = true;
+        this.scene.add(mesh);
+        this.medkits[mk.id] = mesh;
+      }
+    }
+
+    for (const id in this.medkits) {
+      this.medkits[id].rotation.y += deltaTime * 2;
+      this.medkits[id].rotation.x += deltaTime * 1;
     }
   }
 

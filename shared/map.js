@@ -6,6 +6,7 @@
 
 export let mapData = [];
 export let grid = []; 
+export let jumpPads = [];
 export const GRID_SIZE = 40;
 export const CELL_SIZE = 2;
 export const OFFSET = (GRID_SIZE * CELL_SIZE) / 2; 
@@ -43,6 +44,16 @@ export function generateMap(seed) {
         grid[z][x] = 0;
       }
     }
+  }
+
+  jumpPads = [];
+  // Jump Pads nos cantos da arena central
+  const jpOffsets = [[-2, -2], [2, -2], [-2, 2], [2, 2]];
+  for (const [dx, dz] of jpOffsets) {
+    jumpPads.push({
+      x: (cx + dx) * CELL_SIZE - OFFSET + (CELL_SIZE / 2),
+      z: (cz + dz) * CELL_SIZE - OFFSET + (CELL_SIZE / 2)
+    });
   }
 
   // === 2. Salas Estratégicas Espalhadas ===

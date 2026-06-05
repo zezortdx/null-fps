@@ -1,6 +1,6 @@
 import geckos from '@geckos.io/server';
 import { BotManager } from './bots.js';
-import { generateMap, mapData } from '../shared/map.js';
+import { generateMap, mapData, grid, GRID_SIZE, CELL_SIZE, OFFSET } from '../shared/map.js';
 
 const io = geckos();
 
@@ -98,7 +98,8 @@ io.onConnection(channel => {
           io.room().emit('killfeed', { 
             msg: `${attackerName} → ${targetName}`,
             weapon: data.weapon || 'pistol',
-            headshot: data.headshot || false
+            headshot: data.headshot || false,
+            attackerKills: attacker.kills
           });
           if (channels[targetId]) {
             channels[targetId].emit('playerDied', { killerId: channel.id });
@@ -107,7 +108,8 @@ io.onConnection(channel => {
           io.room().emit('killfeed', { 
             msg: `${attackerName} → ${targetName}`,
             weapon: data.weapon || 'pistol',
-            headshot: data.headshot || false
+            headshot: data.headshot || false,
+            attackerKills: attacker.kills
           });
         }
       } else {
@@ -128,6 +130,33 @@ io.onConnection(channel => {
 const TICK_RATE = 30;
 const TICK_MS = 1000 / TICK_RATE;
 
+let medkits = [];
+let nextMedkitId = 1;
+
+function spawnMedkit() {
+  if (medkits.length >= 4) return;
+  
+  let rx, rz;
+  let attempts = 0;
+  do {
+    rx = Math.floor(Math.random() * GRID_SIZE);
+    rz = Math.floor(Math.random() * GRID_SIZE);
+    attempts++;
+  } while (grid[rz] && grid[rz][rx] !== 0 && attempts < 100);
+
+  if (grid[rz] && grid[rz][rx] === 0) {
+    medkits.push({
+      id: nextMedkitId++,
+      x: rx * CELL_SIZE - OFFSET + (CELL_SIZE / 2),
+      z: rz * CELL_SIZE - OFFSET + (CELL_SIZE / 2),
+      hp: 50
+    });
+  }
+}
+
+// Initial spawns
+setTimeout(() => { spawnMedkit(); spawnMedkit(); spawnMedkit(); }, 2000);
+
 setInterval(() => {
   botManager.update(players);
   
@@ -139,7 +168,8 @@ setInterval(() => {
       io.room().emit('killfeed', { 
         msg: `BOT → ${players[id].nickname}`,
         weapon: 'smg',
-        headshot: false
+        headshot: false,
+        attackerKills: 0
       });
       if (channels[id]) {
         channels[id].emit('playerDied', { killerId: 'bot' });
@@ -149,10 +179,29 @@ setInterval(() => {
 
   const botsState = botManager.getBotsState();
   
-  // State agora inclui HP de cada entidade para barras de vida
+  // Medkit collision
+  for (const id in players) {
+    const p = players[id];
+    if (p.hp > 0 && p.hp < 100 && !p.dead) {
+      for (let i = medkits.length - 1; i >= 0; i--) {
+        const mk = medkits[i];
+        if (Math.hypot(p.x - mk.x, p.z - mk.z) < 1.5) {
+          p.hp = Math.min(100, p.hp + mk.hp);
+          medkits.splice(i, 1);
+          setTimeout(spawnMedkit, 15000);
+          
+          if (channels[id]) {
+            channels[id].emit('heal', { amount: mk.hp });
+          }
+        }
+      }
+    }
+  }
+
   const state = {
     players: players,
-    bots: botsState
+    bots: botsState,
+    medkits: medkits
   };
 
   io.room().emit('stateUpdate', state);

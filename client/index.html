@@ -92,7 +92,7 @@
         </div>
       </div>
 
-      <!-- Status Bar Inferior Direito (HP, Ammo) -->
+      <!-- Status Bar Inferior Direito (HP, Ammo, Dash) -->
       <div class="status-bar">
         <div class="status-section">
           <span class="status-label">SYS.HP</span>
@@ -101,6 +101,10 @@
         <div class="status-section ammo-section">
           <span class="status-label">SYS.AMMO</span>
           <span id="ui-ammo" class="status-value">30</span>
+        </div>
+        <div class="status-section dash-section">
+          <span class="status-label">SYS.DASH</span>
+          <span id="ui-dash" class="status-value">RDY</span>
         </div>
       </div>
     </div>
@@ -112,10 +116,12 @@
         <table>
           <thead>
             <tr>
+              <th>RANK</th>
               <th>NODE</th>
               <th>OPERADOR</th>
-              <th>EXECUÇÕES</th>
-              <th>FALHAS</th>
+              <th>KILLS</th>
+              <th>DEATHS</th>
+              <th>K/D</th>
             </tr>
           </thead>
           <tbody id="scoreboard-tbody">

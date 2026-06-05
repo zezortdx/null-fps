@@ -8,6 +8,8 @@ export const Input = {
     control: false,
     tab: false,
     ' ': false, // Space
+    q: false,
+    e: false,
     1: false,
     2: false,
     3: false,
