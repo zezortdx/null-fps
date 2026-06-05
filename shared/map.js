@@ -159,7 +159,7 @@ export function generateMap(seed) {
     }
   }
 
-  // === 5. Coberturas dentro das salas grandes (pilares de 1×1) ===
+  // === 5. Coberturas dentro das salas grandes (pilares e meia-paredes) ===
   for (const room of rooms) {
     if (room.w >= 4 && room.h >= 4) {
       const numCovers = Math.floor(random() * 2) + 1;
@@ -168,11 +168,19 @@ export function generateMap(seed) {
         const pz = room.z + 1 + Math.floor(random() * (room.h - 2));
         // Não bloqueia o centro exato do spawn
         if (Math.abs(px - cx) > 2 || Math.abs(pz - cz) > 2) {
-          grid[pz][px] = 1;
+          grid[pz][px] = 2; // 2 = Meia-parede
         }
       }
     }
   }
+
+  // Plataformas nas laterais da Arena Central
+  grid[cz][cx-4] = 2;
+  grid[cz-1][cx-4] = 2;
+  grid[cz+1][cx-4] = 2;
+  grid[cz][cx+4] = 2;
+  grid[cz-1][cx+4] = 2;
+  grid[cz+1][cx+4] = 2;
 
   // === 6. Limpa borda do mapa (1 célula de margem aberta) ===
   // Mantém a borda como parede para contenção
@@ -180,14 +188,15 @@ export function generateMap(seed) {
   // === 7. Gera AABBs para paredes ===
   for (let z = 0; z < GRID_SIZE; z++) {
     for (let x = 0; x < GRID_SIZE; x++) {
-      if (grid[z][x] === 1) {
+      if (grid[z][x] === 1 || grid[z][x] === 2) {
         const minX = (x * CELL_SIZE) - OFFSET;
         const minZ = (z * CELL_SIZE) - OFFSET;
+        const maxY = grid[z][x] === 2 ? 1.2 : 3.5;
         mapData.push({
           minX: minX,
           maxX: minX + CELL_SIZE,
           minY: 0,
-          maxY: 3.5, 
+          maxY: maxY, 
           minZ: minZ,
           maxZ: minZ + CELL_SIZE
         });
@@ -228,7 +237,7 @@ export function findPath(startX, startZ, endX, endZ) {
 
   if (sx < 0 || sx >= GRID_SIZE || sz < 0 || sz >= GRID_SIZE) return null;
   if (ex < 0 || ex >= GRID_SIZE || ez < 0 || ez >= GRID_SIZE) return null;
-  if (grid[ez][ex] === 1) return null; 
+  if (grid[ez] && grid[ez][ex] !== 0) return null; 
 
   const openList = [];
   const closedSet = new Set();

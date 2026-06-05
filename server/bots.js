@@ -57,25 +57,34 @@ export class Bot {
     let nextX = this.x + stepX;
     let nextZ = this.z + stepZ;
     
-    // Colisão AABB - impede que bots atravessem paredes
+    // Colisão AABB com deslizamento (Wall-Sliding)
     const pSize = 0.4;
-    let blocked = false;
+    let colX = false;
+    let colZ = false;
     
     for (const aabb of mapData) {
       if (aabb.maxY <= 0.5) continue; // Ignora obstáculos baixos
-      if (
-        nextX + pSize > aabb.minX && nextX - pSize < aabb.maxX &&
-        nextZ + pSize > aabb.minZ && nextZ - pSize < aabb.maxZ &&
-        this.y < aabb.maxY
-      ) {
-        blocked = true;
-        break;
+      if (this.y >= aabb.maxY) continue; // Ignora se o bot estiver acima da cobertura
+      
+      // Testa eixo X
+      if (nextX + pSize > aabb.minX && nextX - pSize < aabb.maxX &&
+          this.z + pSize > aabb.minZ && this.z - pSize < aabb.maxZ) {
+        colX = true;
+      }
+      // Testa eixo Z
+      if (this.x + pSize > aabb.minX && this.x - pSize < aabb.maxX &&
+          nextZ + pSize > aabb.minZ && nextZ - pSize < aabb.maxZ) {
+        colZ = true;
       }
     }
     
-    if (!blocked) {
-      this.x = nextX;
-      this.z = nextZ;
+    if (!colX) this.x = nextX;
+    if (!colZ) this.z = nextZ;
+    
+    if (colX && colZ) {
+      // Bloqueado nos dois eixos (preso em quina cega), forçar recálculo
+      this.pathRecalcTimer = 0;
+      return true;
     }
     
     return false;
@@ -101,7 +110,7 @@ export class Bot {
     return false;
   }
 
-  update(players) {
+  update(players, allBots, killfeedCallback) {
     // === Gerenciamento de Morte e Respawn ===
     if (this.hp <= 0 && this.state !== 'INATIVO') {
       this.state = 'INATIVO';
@@ -126,12 +135,15 @@ export class Bot {
     if (this.pathRecalcTimer > 0) this.pathRecalcTimer--;
 
     // === Detecção de Alvo ===
-    const humanPlayers = Object.values(players).filter(p => !p.isBot && p.hp > 0);
+    const possibleTargets = [
+      ...Object.values(players).filter(p => !p.isBot && p.hp > 0),
+      ...Object.values(allBots).filter(b => b.id !== this.id && b.hp > 0 && b.state !== 'INATIVO')
+    ];
     
     let target = null;
     let minDist = Infinity;
 
-    humanPlayers.forEach(p => {
+    possibleTargets.forEach(p => {
       const dist = Math.sqrt((p.x - this.x) ** 2 + (p.z - this.z) ** 2);
       if (dist < minDist) {
         minDist = dist;
@@ -181,9 +193,20 @@ export class Bot {
     if (this.state === 'SHOOT') {
       if (target) {
         this.rY = Math.atan2(target.x - this.x, target.z - this.z);
+        
+        // Strafing Aleatório (Movimento lateral para esquivar)
+        if (Math.random() < 0.2) {
+          const strafeDir = Math.random() > 0.5 ? 1 : -1;
+          const right = { x: Math.cos(this.rY), z: -Math.sin(this.rY) };
+          this.moveTowards(this.x + right.x * strafeDir * 2, this.z + right.z * strafeDir * 2);
+        }
+
         if (this.attackCooldown <= 0) {
           target.hp -= 8; // Dano menor (era 15)
-          this.attackCooldown = 60; // Mais lento para atirar (2 segundos)
+          this.attackCooldown = 40; // Mais rápido um pouco
+          if (target.hp <= 0 && target.isBot) {
+            if (killfeedCallback) killfeedCallback('BOT → BOT', 'smg');
+          }
         }
       }
     } else if (this.state === 'CHASE') {
@@ -226,7 +249,7 @@ export class BotManager {
     this.bots = {};
   }
 
-  update(players) {
+  update(players, killfeedCallback) {
     const humanCount = Object.keys(players).length;
     const targetEntities = 10; // Mais bots para o mapa competitivo 40x40
     
@@ -243,7 +266,7 @@ export class BotManager {
     }
 
     for (const botId in this.bots) {
-      this.bots[botId].update(players);
+      this.bots[botId].update(players, this.bots, killfeedCallback);
     }
   }
 

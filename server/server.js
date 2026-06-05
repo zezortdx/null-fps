@@ -158,9 +158,16 @@ function spawnMedkit() {
 setTimeout(() => { spawnMedkit(); spawnMedkit(); spawnMedkit(); }, 2000);
 
 setInterval(() => {
-  botManager.update(players);
+  botManager.update(players, (msg, weapon) => {
+    io.room().emit('killfeed', { 
+      msg: msg,
+      weapon: weapon,
+      headshot: false,
+      attackerKills: 0
+    });
+  });
   
-  // Verifica se o bot matou alguém
+  // Verifica se o bot matou um humano
   for (const id in players) {
     if (players[id].hp <= 0 && !players[id].dead) {
       players[id].dead = true;
