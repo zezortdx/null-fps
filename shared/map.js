@@ -7,7 +7,7 @@
 export let mapData = [];
 export let grid = []; 
 export let jumpPads = [];
-export const GRID_SIZE = 40;
+export const GRID_SIZE = 60;
 export const CELL_SIZE = 2;
 export const OFFSET = (GRID_SIZE * CELL_SIZE) / 2; 
 
@@ -59,7 +59,7 @@ export function generateMap(seed) {
   // === 2. Salas Estratégicas Espalhadas ===
   const rooms = [];
   let roomAttempts = 0;
-  while (rooms.length < 12 && roomAttempts < 80) {
+  while (rooms.length < 24 && roomAttempts < 150) {
     roomAttempts++;
     const rw = Math.floor(random() * 3) + 3; // 3-5 largura
     const rh = Math.floor(random() * 3) + 3; // 3-5 altura
@@ -126,7 +126,7 @@ export function generateMap(seed) {
   }
 
   // === 4. Corredores extras para criar atalhos e loops ===
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 8; i++) {
     const a = rooms[Math.floor(random() * rooms.length)];
     const b = rooms[Math.floor(random() * rooms.length)];
     if (a === b) continue;

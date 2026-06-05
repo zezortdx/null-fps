@@ -1,6 +1,15 @@
 import { randomUUID } from 'crypto';
 import { checkLineOfSight, findPath, grid, GRID_SIZE, CELL_SIZE, OFFSET, mapData } from '../shared/map.js';
 
+// Perfis de arma dos bots (cd em ticks @30TPS). range = alcance efetivo de tiro.
+const BOT_WEAPONS = {
+  smg:     { dmg: 7,  cd: 7,  range: 16, baseAcc: 0.75 },
+  pistol:  { dmg: 14, cd: 18, range: 22, baseAcc: 0.85 },
+  shotgun: { dmg: 32, cd: 34, range: 9,  baseAcc: 0.65 },
+  sniper:  { dmg: 55, cd: 55, range: 40, baseAcc: 0.92 },
+};
+const BOT_WEAPON_IDS = Object.keys(BOT_WEAPONS);
+
 export class Bot {
   constructor() {
     this.id = 'bot_' + randomUUID().substring(0, 8);
@@ -10,11 +19,19 @@ export class Bot {
     this.hp = 100;
     this.state = 'WANDER'; // WANDER, CHASE, SHOOT, INATIVO
     this.targetId = null;
-    this.speed = 0.07;
     this.attackCooldown = 0;
     this.respawnTimer = 0;
     this.losLostTimer = 0;
     this.isBot = true;
+
+    // Habilidade (0..1): afeta precisão, tempo de reação e velocidade
+    this.skill = 0.3 + Math.random() * 0.6;
+    this.reactionTicks = Math.round((1 - this.skill) * 18 + 5); // ~5..23 ticks (0.16..0.77s)
+    this.aimTicks = 0; // ticks de LoS contínua no alvo atual
+    this.speed = 0.06 + this.skill * 0.03; // bots habilidosos se movem mais rápido
+
+    // Arma do bot
+    this.weapon = BOT_WEAPON_IDS[Math.floor(Math.random() * BOT_WEAPON_IDS.length)];
 
     // A* Pathfinding state
     this.path = null;
@@ -188,9 +205,10 @@ export class Bot {
     });
 
     // Check Line of Sight
+    const wpn = BOT_WEAPONS[this.weapon];
     let hasLoS = false;
     const DETECT_RANGE = 30;
-    const SHOOT_RANGE = 12;
+    const SHOOT_RANGE = wpn.range;
 
     if (target && minDist < DETECT_RANGE) {
       hasLoS = checkLineOfSight(
@@ -229,23 +247,49 @@ export class Bot {
     if (this.state === 'SHOOT') {
       if (target) {
         this.rY = Math.atan2(target.x - this.x, target.z - this.z);
-        
+        this.aimTicks++;
+
         // Strafing Aleatório (Movimento lateral para esquivar)
+        let targetMoving = false;
         if (Math.random() < 0.2) {
           const strafeDir = Math.random() > 0.5 ? 1 : -1;
           const right = { x: Math.cos(this.rY), z: -Math.sin(this.rY) };
           this.moveTowards(this.x + right.x * strafeDir * 2, this.z + right.z * strafeDir * 2);
         }
 
-        if (this.attackCooldown <= 0) {
-          target.hp -= 8; // Dano menor (era 15)
-          this.attackCooldown = 40; // Mais rápido um pouco
-          if (target.hp <= 0 && target.isBot) {
-            if (killfeedCallback) killfeedCallback('BOT → BOT', 'smg');
+        // Detecta se o alvo está se movendo (mira fica mais difícil)
+        if (this._lastTX !== undefined) {
+          const moved = Math.hypot(target.x - this._lastTX, target.z - this._lastTZ);
+          targetMoving = moved > 0.08;
+        }
+        this._lastTX = target.x;
+        this._lastTZ = target.z;
+
+        // Só atira após o tempo de reação e respeitando a cadência
+        if (this.aimTicks >= this.reactionTicks && this.attackCooldown <= 0) {
+          this.attackCooldown = wpn.cd;
+
+          // Chance de acerto: habilidade × precisão da arma, cai com distância e movimento
+          let hitChance = this.skill * wpn.baseAcc;
+          hitChance *= 1 - 0.5 * (minDist / wpn.range); // mais longe = pior
+          if (targetMoving) hitChance *= 0.6;
+          hitChance = Math.max(0.05, Math.min(0.95, hitChance));
+
+          if (Math.random() < hitChance) {
+            let dmg = wpn.dmg;
+            // Bots habilidosos acertam headshots ocasionais
+            const headshot = Math.random() < this.skill * 0.18;
+            if (headshot) dmg = Math.round(dmg * 1.8);
+            target.hp -= dmg;
+
+            if (target.hp <= 0 && target.isBot) {
+              if (killfeedCallback) killfeedCallback('BOT → BOT', this.weapon);
+            }
           }
         }
       }
     } else if (this.state === 'CHASE') {
+      this.aimTicks = 0;
       if (target) {
         if (hasLoS) {
           // Perseguição direta com visada
@@ -261,6 +305,7 @@ export class Bot {
         }
       }
     } else if (this.state === 'WANDER') {
+      this.aimTicks = 0;
       if (!this.path) {
         const wanderTarget = this.getRandomOpenCell();
         this.path = findPath(this.x, this.z, wanderTarget.x, wanderTarget.z);
@@ -287,17 +332,19 @@ export class BotManager {
 
   update(players, killfeedCallback) {
     const humanCount = Object.keys(players).length;
-    const targetEntities = 10; // Mais bots para o mapa competitivo 40x40
+    const targetEntities = 16; // Mais bots para o mapa maior
     
-    if (humanCount < 2) {
-      while (humanCount + Object.keys(this.bots).length < targetEntities) {
-        const newBot = new Bot();
-        this.bots[newBot.id] = newBot;
-      }
-    } else {
-      if (Object.keys(this.bots).length > 0) {
-        const botIds = Object.keys(this.bots);
+    while (humanCount + Object.keys(this.bots).length < targetEntities) {
+      const newBot = new Bot();
+      this.bots[newBot.id] = newBot;
+    }
+    
+    while (humanCount + Object.keys(this.bots).length > targetEntities) {
+      const botIds = Object.keys(this.bots);
+      if (botIds.length > 0) {
         delete this.bots[botIds[0]];
+      } else {
+        break;
       }
     }
 
@@ -323,7 +370,7 @@ export class BotManager {
     for (const id in this.bots) {
       const b = this.bots[id];
       if (b.state !== 'INATIVO') {
-        state[id] = { id: b.id, x: b.x, y: b.y, z: b.z, rY: b.rY, hp: b.hp, isBot: true };
+        state[id] = { id: b.id, x: b.x, y: b.y, z: b.z, rY: b.rY, hp: b.hp, isBot: true, weapon: b.weapon };
       }
     }
     return state;

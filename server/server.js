@@ -37,7 +37,8 @@ io.onConnection(channel => {
     isBot: false,
     nickname: 'Operador_' + channel.id.substring(0, 4),
     dead: false,
-    weapon: 'pistol'
+    weapon: 'pistol',
+    lastHitTime: 0
   };
 
   channel.onDisconnect(() => {
@@ -69,6 +70,72 @@ io.onConnection(channel => {
     channel.emit('pong', data);
   });
 
+  // Respawn handler
+  channel.on('respawn', () => {
+    if (players[channel.id]) {
+      players[channel.id].hp = 100;
+      players[channel.id].dead = false;
+      
+      // Find random open spawn cell
+      let rx, rz, attempts = 0;
+      do {
+        rx = Math.floor(Math.random() * GRID_SIZE);
+        rz = Math.floor(Math.random() * GRID_SIZE);
+        attempts++;
+      } while (grid[rz] && grid[rz][rx] !== 0 && attempts < 100);
+      
+      const spawnX = rx * CELL_SIZE - OFFSET + (CELL_SIZE / 2);
+      const spawnZ = rz * CELL_SIZE - OFFSET + (CELL_SIZE / 2);
+      
+      players[channel.id].x = spawnX;
+      players[channel.id].y = 1;
+      players[channel.id].z = spawnZ;
+      
+      channel.emit('respawned', { x: spawnX, y: 1, z: spawnZ }, { reliable: true });
+    }
+  });
+
+  // Grenade handler
+  channel.on('grenade', data => {
+    if (!players[channel.id] || players[channel.id].hp <= 0) return;
+    
+    const gx = data.x + Math.sin(data.rY) * 8;
+    const gz = data.z + Math.cos(data.rY) * 8;
+    
+    // Deal AoE damage after 1.5s fuse
+    setTimeout(() => {
+      const BLAST_RADIUS = 6;
+      const BLAST_DAMAGE = 60;
+      
+      // Damage players
+      for (const pid in players) {
+        if (players[pid].hp <= 0 || players[pid].dead) continue;
+        const dist = Math.hypot(players[pid].x - gx, players[pid].z - gz);
+        if (dist < BLAST_RADIUS) {
+          const dmg = Math.floor(BLAST_DAMAGE * (1 - dist / BLAST_RADIUS));
+          players[pid].hp -= dmg;
+          players[pid].lastHitTime = Date.now();
+          if (channels[pid]) {
+            channels[pid].emit('damaged', { fromX: gx, fromZ: gz, damage: dmg });
+          }
+        }
+      }
+      
+      // Damage bots
+      for (const bid in botManager.bots) {
+        const b = botManager.bots[bid];
+        if (b.hp <= 0 || b.state === 'INATIVO') continue;
+        const dist = Math.hypot(b.x - gx, b.z - gz);
+        if (dist < BLAST_RADIUS) {
+          b.hp -= Math.floor(BLAST_DAMAGE * (1 - dist / BLAST_RADIUS));
+        }
+      }
+      
+      // Notify all players of the explosion
+      io.room().emit('explosion', { x: gx, z: gz, radius: BLAST_RADIUS });
+    }, 1500);
+  });
+
   // Dano agora variável — o cliente envia qual arma usou e o dano
   channel.on('damage', data => {
     const attacker = players[channel.id];
@@ -80,6 +147,7 @@ io.onConnection(channel => {
 
     if (target && target.hp > 0 && target.state !== 'INATIVO') {
       target.hp -= damage;
+      if (!target.isBot) target.lastHitTime = Date.now();
       
       // Notifica o atacante que o hit conectou (para hitmarker)
       channel.emit('hitConfirm', { 
@@ -188,7 +256,16 @@ setInterval(() => {
   }
 
   const botsState = botManager.getBotsState();
-  
+
+  // Passive HP regen: starts 5s after last damage, ~12 hp/s
+  const now = Date.now();
+  for (const id in players) {
+    const p = players[id];
+    if (!p.dead && p.hp > 0 && p.hp < 100 && now - p.lastHitTime > 5000) {
+      p.hp = Math.min(100, p.hp + 12 * (TICK_MS / 1000));
+    }
+  }
+
   // Medkit collision
   for (const id in players) {
     const p = players[id];

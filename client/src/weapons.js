@@ -2,10 +2,17 @@ import * as THREE from 'three';
 
 // Weapon definitions
 export const WEAPONS = [
-  { id: 'pistol', name: 'PISTOL', key: 1, damage: 20, fireRate: 0.25, magSize: 12, reloadTime: 1.2, spread: 0, auto: false, recoilAmount: 0.15 },
-  { id: 'smg', name: 'SMG', key: 2, damage: 12, fireRate: 0.08, magSize: 30, reloadTime: 1.8, spread: 1.5, auto: true, recoilAmount: 0.08 },
-  { id: 'shotgun', name: 'SHOTGUN', key: 3, damage: 8, fireRate: 0.9, magSize: 6, reloadTime: 2.5, spread: 7, auto: false, pellets: 6, recoilAmount: 0.35 },
-  { id: 'sniper', name: 'SNIPER', key: 4, damage: 80, fireRate: 1.2, magSize: 5, reloadTime: 2.0, spread: 0, auto: false, recoilAmount: 0.5 },
+  // bloom: graus de spread acumulados por disparo (precisão piora em rajada)
+  // bloomMax: teto do spread acumulado | bloomRecover: graus/seg recuperados parado
+  // falloffStart/End: distância (m) onde o dano começa/termina de cair | minMult: dano mínimo
+  { id: 'pistol', name: 'PISTOL', key: 1, damage: 20, fireRate: 0.25, magSize: 12, reloadTime: 1.2, spread: 0.4, auto: false, recoilAmount: 0.15, zoomFov: 60,
+    bloom: 0.6, bloomMax: 4, bloomRecover: 6, falloffStart: 25, falloffEnd: 45, minMult: 0.6 },
+  { id: 'smg', name: 'SMG', key: 2, damage: 12, fireRate: 0.08, magSize: 30, reloadTime: 1.8, spread: 1.2, auto: true, recoilAmount: 0.08, zoomFov: 58,
+    bloom: 0.5, bloomMax: 7, bloomRecover: 9, falloffStart: 14, falloffEnd: 32, minMult: 0.45 },
+  { id: 'shotgun', name: 'SHOTGUN', key: 3, damage: 8, fireRate: 0.9, magSize: 6, reloadTime: 2.5, spread: 7, auto: false, pellets: 8, recoilAmount: 0.35, zoomFov: 65,
+    bloom: 0, bloomMax: 0, bloomRecover: 0, falloffStart: 8, falloffEnd: 22, minMult: 0.2 },
+  { id: 'sniper', name: 'SNIPER', key: 4, damage: 80, fireRate: 1.2, magSize: 5, reloadTime: 2.0, spread: 0, auto: false, recoilAmount: 0.5, zoomFov: 25,
+    bloom: 0, bloomMax: 0, bloomRecover: 0, falloffStart: 100, falloffEnd: 200, minMult: 1 },
 ];
 
 export function getWeaponByKey(keyNumber) {

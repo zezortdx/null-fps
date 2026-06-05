@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NULL - COMPETITIVE FPS</title>
+    <meta name="description" content="NULL FPS - Arena Tática Cyberpunk com IA avançada e otimização dinâmica" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
@@ -20,7 +21,7 @@
     <div id="lobby">
       <div class="os-window">
         <div class="os-header">
-          <span class="os-title">NULL_FPS_TERMINAL // v4.5.1</span>
+          <span class="os-title">NULL_FPS_TERMINAL // v5.0.0</span>
           <div class="os-controls">
             <span class="ctrl-btn"></span>
             <span class="ctrl-btn"></span>
@@ -31,9 +32,9 @@
         <div class="os-body">
           <div class="os-branding">
             <h1 class="os-logo glitch" data-text="NULL">NULL</h1>
-            <p class="os-desc">TACTICAL ESPORTS ARENA</p>
+            <p class="os-desc">ARENA TÁTICA CYBERPUNK</p>
           </div>
-          
+
           <div class="os-login">
             <label class="os-label">OPERATOR_ID:</label>
             <div class="os-input-box">
@@ -41,15 +42,15 @@
               <input type="text" id="nickname" value="Operador" autocomplete="off" spellcheck="false" />
               <span class="os-cursor">_</span>
             </div>
-            
-            <button id="btn-enter" class="os-btn">
-              <span>INITIALIZE_CONNECTION</span>
+
+            <button id="btn-enter" class="os-btn" disabled>
+              <span id="btn-enter-label">ESTABELECENDO LINK...</span>
             </button>
           </div>
-          
+
           <div class="os-footer">
             <span>SECURE LINK: ENCRYPTED</span>
-            <span>SERVER: CONNECTED</span>
+            <span id="os-status">SERVER: <b>OFFLINE</b></span>
           </div>
         </div>
       </div>
@@ -57,11 +58,25 @@
 
     <!-- UI Overlay: HUD Principal -->
     <div id="hud" class="hidden">
+      <!-- Match Timer (Top Center) -->
+      <div id="match-info">
+        <span id="match-timer">5:00</span>
+        <span id="kd-display">0 / 0</span>
+      </div>
+
       <!-- Minimap Radar -->
       <canvas id="minimap"></canvas>
       
       <!-- Killfeed -->
       <div id="killfeed"></div>
+
+      <!-- Sniper Scope Overlay -->
+      <div id="sniper-scope" class="hidden">
+        <div class="scope-lens"></div>
+        <div class="scope-line scope-h"></div>
+        <div class="scope-line scope-v"></div>
+        <div class="scope-dot"></div>
+      </div>
 
       <!-- Crosshair -->
       <div class="crosshair">
@@ -72,7 +87,7 @@
         <div class="cross-b"></div>
       </div>
       
-      <!-- Weapon Inventory HUD (Central Inferior) -->
+      <!-- Weapon Inventory HUD -->
       <div id="inventory-hud" class="inventory-container">
         <div class="weapon-slot" id="slot-1">
           <span class="slot-key">[1]</span>
@@ -92,24 +107,43 @@
         </div>
       </div>
 
-      <!-- Status Bar Inferior Direito (HP, Ammo, Dash) -->
+      <!-- Status Bar (HP, Ammo, Dash) -->
       <div class="status-bar">
-        <div class="status-section">
+        <div class="status-section hp-section">
           <span class="status-label">SYS.HP</span>
           <span id="ui-hp" class="status-value">100</span>
+          <div class="hp-bar"><div id="hp-fill" class="hp-fill"></div></div>
         </div>
         <div class="status-section ammo-section">
           <span class="status-label">SYS.AMMO</span>
-          <span id="ui-ammo" class="status-value">30</span>
+          <span id="ui-ammo" class="status-value">12</span>
         </div>
         <div class="status-section dash-section">
           <span class="status-label">SYS.DASH</span>
           <span id="ui-dash" class="status-value">RDY</span>
         </div>
       </div>
+
+      <!-- Controls Help (F1) -->
+      <div id="controls-overlay" class="hidden">
+        <div class="controls-panel">
+          <h3>// CONTROLES</h3>
+          <div class="ctrl-row"><span>WASD</span><span>Mover</span></div>
+          <div class="ctrl-row"><span>SHIFT</span><span>Sprint</span></div>
+          <div class="ctrl-row"><span>CTRL</span><span>Slide</span></div>
+          <div class="ctrl-row"><span>SPACE</span><span>Pular</span></div>
+          <div class="ctrl-row"><span>Q / E</span><span>Dash Lateral</span></div>
+          <div class="ctrl-row"><span>G</span><span>Granada</span></div>
+          <div class="ctrl-row"><span>R</span><span>Reload</span></div>
+          <div class="ctrl-row"><span>MOUSE DIR.</span><span>Mira (Zoom)</span></div>
+          <div class="ctrl-row"><span>1-4</span><span>Trocar Arma</span></div>
+          <div class="ctrl-row"><span>TAB</span><span>Placar</span></div>
+          <div class="ctrl-row"><span>F1</span><span>Ajuda</span></div>
+        </div>
+      </div>
     </div>
 
-    <!-- UI Overlay: Scoreboard (segurando TAB) -->
+    <!-- UI Overlay: Scoreboard (TAB) -->
     <div id="scoreboard-overlay" class="hidden">
       <div class="scoreboard-container">
         <h2 class="glitch-small" data-text="REGISTRO DE REDE">REGISTRO DE REDE</h2>
@@ -125,7 +159,6 @@
             </tr>
           </thead>
           <tbody id="scoreboard-tbody">
-            <!-- Dinâmico -->
           </tbody>
         </table>
       </div>

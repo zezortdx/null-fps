@@ -10,6 +10,9 @@ export const Input = {
     ' ': false, // Space
     q: false,
     e: false,
+    g: false,
+    r: false,
+    f1: false,
     1: false,
     2: false,
     3: false,
@@ -22,7 +25,8 @@ export const Input = {
   init() {
     window.addEventListener('keydown', (e) => {
       const key = e.key.toLowerCase();
-      if (key === 'tab') e.preventDefault(); // Prevent focus change
+      if (key === 'tab') e.preventDefault();
+      if (key === 'f1') e.preventDefault();
 
       if (this.keys.hasOwnProperty(key)) {
         if (!this.keys[key]) {

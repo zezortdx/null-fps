@@ -5,7 +5,7 @@ import { Input } from './input.js';
 import { FeedbackSystem } from './feedback.js';
 import { Minimap } from './minimap.js';
 import { Progression } from './progression.js';
-import { getWeaponByKey, getWeaponById } from './weapons.js';
+import { getWeaponByKey, getWeaponById, WEAPONS } from './weapons.js';
 import { generateMap, mapData, grid, GRID_SIZE, CELL_SIZE, OFFSET, jumpPads } from '../../shared/map.js';
 
 // Configuração do Jogador Local
@@ -18,19 +18,27 @@ const localPlayer = {
   hp: 100,
   weapon: getWeaponById('pistol'),
   ammo: 12,
+  ammoStore: {}, // per-weapon remaining ammo, persists across switches
   reloading: false,
   isSprinting: false,
   isSliding: false,
   slideTimer: 0,
   slideCooldown: 0,
   dashCooldown: 0,
+  grenadeCooldown: 0,
   fireCooldown: 0,
+  isADS: false,
+  bloom: 0, // spread acumulado por disparo, recupera parado
   vX: 0,
   vY: 0,
   vZ: 0,
   isGrounded: true,
-  lastDamageTime: 0
+  totalKills: 0,
+  totalDeaths: 0,
+  killStreak: 0
 };
+
+let matchTimer = 300; // 5 minute rounds
 
 // UI Elements
 const uiHp = document.getElementById('ui-hp');
@@ -39,6 +47,21 @@ const btnEnter = document.getElementById('btn-enter');
 const lobby = document.getElementById('lobby');
 const hud = document.getElementById('hud');
 const deathScreen = document.getElementById('death-screen');
+const scopeOverlay = document.getElementById('sniper-scope');
+const crosshairEl = document.querySelector('.crosshair');
+const hpFill = document.getElementById('hp-fill');
+
+// Atualiza número + barra de vida (cor muda conforme o HP)
+function updateHpUI(hp) {
+  const v = Math.max(0, Math.min(100, Math.ceil(hp)));
+  uiHp.innerText = v;
+  if (hpFill) {
+    hpFill.style.width = v + '%';
+    const color = v > 50 ? '#00ff66' : (v > 20 ? '#ffcc00' : '#ff0033');
+    hpFill.style.background = color;
+    hpFill.style.boxShadow = `0 0 8px ${color}`;
+  }
+}
 
 // Game State
 let engine;
@@ -67,6 +90,10 @@ function initGameSystems() {
   
   progression = new Progression();
 
+  // Seed each weapon with a full magazine
+  for (const w of WEAPONS) localPlayer.ammoStore[w.id] = w.magSize;
+  localPlayer.ammo = localPlayer.ammoStore[localPlayer.weapon.id];
+
   engine.setWeaponModel(localPlayer.weapon.id);
   uiAmmo.innerText = localPlayer.ammo;
   
@@ -92,7 +119,14 @@ function connectBackground() {
       generateMap(data.seed);
       engine.setupWorld(); // Generate world meshes now that mapData exists
       engine.localId = data.id;
-      
+
+      // Lobby pronto para jogar
+      btnEnter.disabled = false;
+      const lbl = document.getElementById('btn-enter-label');
+      if (lbl) lbl.innerText = 'INICIAR CONEXÃO';
+      const status = document.getElementById('os-status');
+      if (status) status.innerHTML = 'SERVER: <b style="color:var(--primary)">ONLINE</b>';
+
       // Update minimap with map data if already initialized
       if (minimap) minimap.setMapData(grid, GRID_SIZE, CELL_SIZE, OFFSET);
     });
@@ -107,7 +141,7 @@ function connectBackground() {
         // Sincronizar stats do player local
         if (state.players[localPlayer.id]) {
           localPlayer.hp = state.players[localPlayer.id].hp;
-          uiHp.innerText = localPlayer.hp;
+          updateHpUI(localPlayer.hp);
         }
       }
     });
@@ -116,10 +150,18 @@ function connectBackground() {
       if (!isPlaying) return;
       feedback.showHitmarker(data.headshot);
       if (data.killed) {
+        localPlayer.totalKills++;
+        localPlayer.killStreak++;
         progression.registerKill();
         const target = serverEntities[data.targetId];
         if (target) {
           feedback.showKillConfirmation(target.nickname || 'BOT');
+        }
+
+        // Kill streak announcements (consecutive kills without dying)
+        const streakMsgs = { 3: 'TRIPLE KILL!', 5: 'KILLING SPREE!', 10: 'UNSTOPPABLE!', 20: 'GODLIKE!' };
+        if (streakMsgs[localPlayer.killStreak]) {
+          showAnnouncement(streakMsgs[localPlayer.killStreak]);
         }
       }
     });
@@ -128,8 +170,7 @@ function connectBackground() {
       if (!isPlaying) return;
       feedback.triggerDamageFlash();
       feedback.triggerShake(0.05);
-      localPlayer.lastDamageTime = performance.now();
-      
+
       const dx = data.fromX - localPlayer.x;
       const dz = data.fromZ - localPlayer.z;
       const angle = Math.atan2(dx, dz) - localPlayer.rY;
@@ -139,8 +180,7 @@ function connectBackground() {
     channel.on('heal', data => {
       if (!isPlaying) return;
       localPlayer.hp = Math.min(100, localPlayer.hp + data.amount);
-      uiHp.innerText = Math.floor(localPlayer.hp);
-      // Optional: Add a green flash or sound here
+      updateHpUI(localPlayer.hp);
     });
 
     channel.on('killfeed', data => {
@@ -155,8 +195,19 @@ function connectBackground() {
       }, 4000);
     });
 
-    channel.on('playerShot', data => {
-      // Sound logic here
+    channel.on('explosion', data => {
+      if (!isPlaying) return;
+      // Visual flash
+      const flashDiv = document.createElement('div');
+      flashDiv.className = 'explosion-flash';
+      document.body.appendChild(flashDiv);
+      setTimeout(() => flashDiv.remove(), 500);
+      
+      // Camera shake based on distance
+      const dist = Math.hypot(localPlayer.x - data.x, localPlayer.z - data.z);
+      if (dist < data.radius * 2) {
+        feedback.triggerShake(0.3 * (1 - dist / (data.radius * 2)));
+      }
     });
 
     channel.on('playerDied', data => {
@@ -165,9 +216,42 @@ function connectBackground() {
       hud.classList.add('hidden');
       deathScreen.classList.remove('hidden');
       progression.registerDeath();
+      localPlayer.totalDeaths++;
+      localPlayer.killStreak = 0;
+      localPlayer.isADS = false;
+      engine.setAim(false, false);
+      if (scopeOverlay) scopeOverlay.classList.add('hidden');
+      if (crosshairEl) crosshairEl.style.opacity = '1';
+      
+      // Respawn after 3 seconds instead of reloading page
       setTimeout(() => {
-        window.location.reload();
+        deathScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+        
+        // Reset player state
+        localPlayer.hp = 100;
+        for (const w of WEAPONS) localPlayer.ammoStore[w.id] = w.magSize;
+        localPlayer.ammo = localPlayer.ammoStore[localPlayer.weapon.id];
+        localPlayer.reloading = false;
+        localPlayer.vX = 0;
+        localPlayer.vY = 0;
+        localPlayer.vZ = 0;
+        localPlayer.dashCooldown = 0;
+        localPlayer.grenadeCooldown = 0;
+        updateHpUI(100);
+        uiAmmo.innerText = localPlayer.ammo;
+        
+        // Request new spawn position from server
+        channel.emit('respawn', {});
+        
+        document.body.requestPointerLock();
       }, 3000);
+    });
+
+    channel.on('respawned', data => {
+      localPlayer.x = data.x;
+      localPlayer.y = data.y;
+      localPlayer.z = data.z;
     });
   });
 }
@@ -198,16 +282,22 @@ btnEnter.addEventListener('click', () => {
 function updateInventoryHUD(weaponId) {
   for (let i = 1; i <= 4; i++) {
     const slot = document.getElementById(`slot-${i}`);
-    if (slot) {
-      slot.classList.remove('active');
-    }
+    if (slot) slot.classList.remove('active');
   }
-  const weaponKeyMap = { 'pistol': 1, 'smg': 2, 'shotgun': 3, 'sniper': 4 };
-  const key = weaponKeyMap[weaponId];
-  if (key) {
-    const activeSlot = document.getElementById(`slot-${key}`);
+  const w = getWeaponById(weaponId);
+  if (w) {
+    const activeSlot = document.getElementById(`slot-${w.key}`);
     if (activeSlot) activeSlot.classList.add('active');
   }
+}
+
+function showAnnouncement(text) {
+  const el = document.createElement('div');
+  el.className = 'glitch announcement';
+  el.setAttribute('data-text', text);
+  el.innerText = text;
+  document.getElementById('hud').appendChild(el);
+  setTimeout(() => el.remove(), 2500);
 }
 
 function handleInputAndMovement(deltaTime) {
@@ -223,8 +313,9 @@ function handleInputAndMovement(deltaTime) {
     if (Input.isJustPressed(i.toString())) {
       const w = getWeaponByKey(i);
       if (w && w.id !== localPlayer.weapon.id && !localPlayer.reloading) {
+        localPlayer.ammoStore[localPlayer.weapon.id] = localPlayer.ammo; // save current
         localPlayer.weapon = w;
-        localPlayer.ammo = w.magSize;
+        localPlayer.ammo = localPlayer.ammoStore[w.id] ?? w.magSize; // restore
         engine.setWeaponModel(w.id);
         uiAmmo.innerText = localPlayer.ammo;
         updateInventoryHUD(w.id);
@@ -233,7 +324,8 @@ function handleInputAndMovement(deltaTime) {
     }
   }
 
-  const rotSpeed = 0.002;
+  // Scale look speed with zoom so aiming stays precise while scoped
+  const rotSpeed = 0.002 * (engine.camera.fov / 75);
   localPlayer.rY -= Input.movementX * rotSpeed;
   engine.camera.rotation.x -= Input.movementY * rotSpeed;
   engine.camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, engine.camera.rotation.x));
@@ -288,6 +380,28 @@ function handleInputAndMovement(deltaTime) {
       const boost = new THREE.Vector3().addScaledVector(right, dashDirX).normalize().multiplyScalar(40);
       localPlayer.vX = boost.x;
       localPlayer.vZ = boost.z;
+    }
+  }
+
+  // Grenade (G key)
+  if (localPlayer.grenadeCooldown > 0) {
+    localPlayer.grenadeCooldown -= deltaTime;
+  }
+  if (Input.isJustPressed('g') && localPlayer.grenadeCooldown <= 0) {
+    localPlayer.grenadeCooldown = 8.0;
+    channel.emit('grenade', {
+      x: localPlayer.x,
+      y: localPlayer.y,
+      z: localPlayer.z,
+      rY: localPlayer.rY
+    });
+  }
+
+  // Controls overlay (F1)
+  const controlsOverlay = document.getElementById('controls-overlay');
+  if (controlsOverlay) {
+    if (Input.isJustPressed('f1')) {
+      controlsOverlay.classList.toggle('hidden');
     }
   }
 
@@ -354,29 +468,15 @@ function handleInputAndMovement(deltaTime) {
     localPlayer.vZ = (localPlayer.vZ / currentSpeed) * maxSpeed;
   }
 
-  // Aplica Gravidade
-  localPlayer.vY -= 30 * deltaTime; // gravidade
-  localPlayer.y += localPlayer.vY * deltaTime;
-  
-  if (localPlayer.y <= 1.0) {
-    localPlayer.y = 1.0;
-    localPlayer.vY = 0;
-    localPlayer.isGrounded = true;
-    
-    // Jump Pad check
-    for (const jp of jumpPads) {
-      if (Math.abs(localPlayer.x - jp.x) < 1.0 && Math.abs(localPlayer.z - jp.z) < 1.0) {
-        localPlayer.vY = 35; // Boing!
-        localPlayer.isGrounded = false;
-        break;
-      }
-    }
-  }
+  // --- Colisão com verticalidade ---
+  const EYE = 1.0;   // altura do olho acima dos pés
+  const STEP = 0.6;  // degrau máximo que sobe automaticamente
+  const pSize = 0.4;
+  const feet = localPlayer.y - EYE;
 
+  // Movimento horizontal: só bloqueia caixas altas demais para subir (degrau)
   const moveVectorX = localPlayer.vX * deltaTime;
   const moveVectorZ = localPlayer.vZ * deltaTime;
-
-  const pSize = 0.4;
   let nextX = localPlayer.x + moveVectorX;
   let nextZ = localPlayer.z + moveVectorZ;
 
@@ -384,6 +484,7 @@ function handleInputAndMovement(deltaTime) {
   let colZ = false;
 
   for (const aabb of mapData) {
+    if (aabb.maxY <= feet + STEP) continue; // dá pra subir/pisar em cima → não é parede
     if (nextX + pSize > aabb.minX && nextX - pSize < aabb.maxX &&
         localPlayer.z + pSize > aabb.minZ && localPlayer.z - pSize < aabb.maxZ) {
       colX = true;
@@ -396,6 +497,53 @@ function handleInputAndMovement(deltaTime) {
 
   if (!colX) localPlayer.x = nextX; else localPlayer.vX = 0;
   if (!colZ) localPlayer.z = nextZ; else localPlayer.vZ = 0;
+
+  // Gravidade
+  localPlayer.vY -= 30 * deltaTime;
+  localPlayer.y += localPlayer.vY * deltaTime;
+
+  // Altura do chão sob o jogador: topo da caixa mais alta pisável, ou o piso (0)
+  let ground = 0;
+  const newFeet = localPlayer.y - EYE;
+  for (const aabb of mapData) {
+    if (localPlayer.x + pSize > aabb.minX && localPlayer.x - pSize < aabb.maxX &&
+        localPlayer.z + pSize > aabb.minZ && localPlayer.z - pSize < aabb.maxZ) {
+      if (aabb.maxY > ground && aabb.maxY <= newFeet + STEP) ground = aabb.maxY;
+    }
+  }
+
+  if (newFeet <= ground) {
+    localPlayer.y = ground + EYE;
+    localPlayer.vY = 0;
+    localPlayer.isGrounded = true;
+
+    // Jump Pad só funciona no piso térreo
+    if (ground === 0) {
+      for (const jp of jumpPads) {
+        if (Math.abs(localPlayer.x - jp.x) < 1.0 && Math.abs(localPlayer.z - jp.z) < 1.0) {
+          localPlayer.vY = 35; // Boing!
+          localPlayer.isGrounded = false;
+          break;
+        }
+      }
+    }
+  } else {
+    localPlayer.isGrounded = false;
+  }
+
+  // Aim-down-sights FOV zoom (disabled while sprinting/sliding)
+  const canADS = localPlayer.isADS && !localPlayer.isSprinting && !localPlayer.isSliding;
+  const targetFov = canADS ? localPlayer.weapon.zoomFov : 75;
+  if (Math.abs(engine.camera.fov - targetFov) > 0.1) {
+    engine.camera.fov = THREE.MathUtils.lerp(engine.camera.fov, targetFov, deltaTime * 12);
+    engine.camera.updateProjectionMatrix();
+  }
+
+  // Ativa a mira: sniper usa luneta (esconde a arma), demais usam mira de ferro centralizada
+  const scoping = canADS && localPlayer.weapon.id === 'sniper';
+  engine.setAim(canADS, scoping);
+  if (scopeOverlay) scopeOverlay.classList.toggle('hidden', !scoping);
+  if (crosshairEl) crosshairEl.style.opacity = (canADS && !scoping) ? '0.35' : (scoping ? '0' : '1');
 
   let camOffset = localPlayer.isSliding ? -0.5 : 0;
   engine.camera.position.set(localPlayer.x, localPlayer.y + camOffset, localPlayer.z);
@@ -421,9 +569,26 @@ let mouseHeld = false;
 window.addEventListener('mousedown', (e) => { if (e.button === 0) mouseHeld = true; });
 window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseHeld = false; });
 
+// Aim-down-sights (right mouse): zoom FOV and tighten spread
+window.addEventListener('mousedown', (e) => {
+  if (e.button === 2 && isPlaying && document.pointerLockElement) localPlayer.isADS = true;
+});
+window.addEventListener('mouseup', (e) => { if (e.button === 2) localPlayer.isADS = false; });
+window.addEventListener('contextmenu', (e) => e.preventDefault());
+
 function handleCombat(deltaTime) {
   if (localPlayer.fireCooldown > 0) {
     localPlayer.fireCooldown -= deltaTime;
+  }
+
+  // Recupera o bloom (precisão) quando não está atirando
+  if (localPlayer.bloom > 0) {
+    localPlayer.bloom = Math.max(0, localPlayer.bloom - localPlayer.weapon.bloomRecover * deltaTime);
+  }
+
+  // Manual reload (R key)
+  if (Input.isJustPressed('r') && !localPlayer.reloading && localPlayer.ammo < localPlayer.weapon.magSize) {
+    reload();
   }
 
   if (localPlayer.isSprinting && !localPlayer.isSliding) return;
@@ -445,17 +610,34 @@ function shoot() {
   localPlayer.ammo--;
   uiAmmo.innerText = localPlayer.ammo;
   localPlayer.fireCooldown = w.fireRate;
-  
+
   channel.emit('shoot', { weapon: w.id });
-  
-  engine.simulateShoot(w.spread, w.pellets || 1, (targetId, isHeadshot) => {
-    channel.emit('damage', { 
-      targetId, 
-      damage: isHeadshot ? w.damage * 1.5 : w.damage,
+
+  // Spread base + bloom acumulado, reduzido ao mirar (ADS)
+  const ads = localPlayer.isADS && !localPlayer.isSprinting;
+  let effectiveSpread = w.spread + localPlayer.bloom;
+  if (ads) effectiveSpread *= 0.35;
+
+  engine.simulateShoot(effectiveSpread, w.pellets || 1, (targetId, isHeadshot, distance) => {
+    // Damage falloff por distância
+    let mult = 1;
+    if (distance > w.falloffStart) {
+      const t = Math.min(1, (distance - w.falloffStart) / (w.falloffEnd - w.falloffStart));
+      mult = 1 + t * (w.minMult - 1); // interpola 1 → minMult
+    }
+    let dmg = w.damage * mult;
+    if (isHeadshot) dmg *= 2;
+
+    channel.emit('damage', {
+      targetId,
+      damage: Math.round(dmg),
       weapon: w.id,
-      headshot: isHeadshot 
+      headshot: isHeadshot
     });
   });
+
+  // Acumula bloom a cada tiro (até o teto)
+  localPlayer.bloom = Math.min(w.bloomMax, localPlayer.bloom + w.bloom);
 
   feedback.triggerShake(w.recoilAmount);
   
@@ -471,6 +653,7 @@ function reload() {
   
   setTimeout(() => {
     localPlayer.ammo = localPlayer.weapon.magSize;
+    localPlayer.ammoStore[localPlayer.weapon.id] = localPlayer.ammo;
     uiAmmo.innerText = localPlayer.ammo;
     localPlayer.reloading = false;
   }, localPlayer.weapon.reloadTime * 1000);
@@ -569,12 +752,6 @@ function gameLoop(now) {
   updateAutoGraphics(deltaTime);
 
   if (isPlaying) {
-    // Passive Healing
-    if (localPlayer.hp < 100 && performance.now() - localPlayer.lastDamageTime > 5000) {
-      localPlayer.hp = Math.min(100, localPlayer.hp + 5 * deltaTime);
-      uiHp.innerText = Math.floor(localPlayer.hp);
-    }
-
     handleInputAndMovement(deltaTime);
     handleCombat(deltaTime);
     
@@ -583,6 +760,21 @@ function gameLoop(now) {
     if (feedback) feedback.update(deltaTime);
     if (progression) progression.update(deltaTime);
     if (minimap) minimap.update(localPlayer, serverEntities);
+    
+    // Match timer
+    matchTimer -= deltaTime;
+    const timerEl = document.getElementById('match-timer');
+    if (timerEl) {
+      const mins = Math.floor(Math.max(0, matchTimer) / 60);
+      const secs = Math.floor(Math.max(0, matchTimer) % 60);
+      timerEl.innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // Kill/Death display
+    const kdDisplay = document.getElementById('kd-display');
+    if (kdDisplay) {
+      kdDisplay.innerText = `${localPlayer.totalKills} / ${localPlayer.totalDeaths}`;
+    }
   } else {
     lobbyTime += deltaTime;
   }
@@ -593,6 +785,5 @@ function gameLoop(now) {
   engine.render(deltaTime, isMoving, shakeOffset, localPlayer.isSprinting, !isPlaying, lobbyTime);
 }
 
-// Começa tudo imediatamente ao carregar
 connectBackground();
 requestAnimationFrame(gameLoop);

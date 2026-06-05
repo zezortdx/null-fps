@@ -2,7 +2,7 @@
 
 # ⚡ NULL FPS
 
-### Multiplayer Browser FPS — Hacker Aesthetic
+### Multiplayer Browser FPS
 
 <img src="docs/preview-lobby.png" alt="NULL FPS Lobby" width="700" />
 
