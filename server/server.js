@@ -60,6 +60,9 @@ io.onConnection(channel => {
 
   channel.on('shoot', data => {
     io.room().emit('playerShot', { id: channel.id, weapon: data.weapon || 'pistol' });
+    if (players[channel.id]) {
+      botManager.onSound(players[channel.id].x, players[channel.id].z, channel.id);
+    }
   });
 
   channel.on('ping', data => {

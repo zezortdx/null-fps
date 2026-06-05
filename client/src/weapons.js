@@ -16,7 +16,8 @@ export function getWeaponById(id) {
   return WEAPONS.find(w => w.id === id) || null;
 }
 
-const weaponSolidMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+const weaponSolidMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+const weaponMetalMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
 const weaponNeonMat = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
 
 export function createWeaponModel(weaponId) {
@@ -24,79 +25,134 @@ export function createWeaponModel(weaponId) {
 
   switch (weaponId) {
     case 'pistol': {
-      const bodyGeo = new THREE.BoxGeometry(0.08, 0.12, 0.3);
-      const body = new THREE.Mesh(bodyGeo, weaponSolidMat);
-      
-      const barrelGeo = new THREE.BoxGeometry(0.06, 0.06, 0.2);
+      const gripGeo = new THREE.BoxGeometry(0.06, 0.15, 0.08);
+      const grip = new THREE.Mesh(gripGeo, weaponSolidMat);
+      grip.position.set(0, -0.05, 0.05);
+      grip.rotation.x = 0.2;
+
+      const slideGeo = new THREE.BoxGeometry(0.08, 0.08, 0.3);
+      const slide = new THREE.Mesh(slideGeo, weaponMetalMat);
+      slide.position.set(0, 0.05, -0.05);
+
+      const barrelGeo = new THREE.BoxGeometry(0.04, 0.04, 0.05);
       const barrel = new THREE.Mesh(barrelGeo, weaponSolidMat);
-      barrel.position.set(0, 0.03, -0.25);
+      barrel.position.set(0, 0.05, -0.22);
 
-      const sightGeo = new THREE.BoxGeometry(0.02, 0.02, 0.05);
+      const laserGeo = new THREE.BoxGeometry(0.02, 0.02, 0.08);
+      const laser = new THREE.Mesh(laserGeo, weaponNeonMat);
+      laser.position.set(0, 0.0, -0.15);
+
+      const sightGeo = new THREE.BoxGeometry(0.02, 0.02, 0.02);
       const sight = new THREE.Mesh(sightGeo, weaponNeonMat);
-      sight.position.set(0, 0.07, -0.15);
+      sight.position.set(0, 0.1, -0.18);
 
-      group.add(body, barrel, sight);
-      group.position.set(0.3, -0.2, -0.4);
+      group.add(grip, slide, barrel, laser, sight);
+      group.position.set(0.2, -0.2, -0.4);
       break;
     }
     case 'smg': {
-      const bodyGeo = new THREE.BoxGeometry(0.1, 0.15, 0.4);
+      const bodyGeo = new THREE.BoxGeometry(0.08, 0.12, 0.35);
       const body = new THREE.Mesh(bodyGeo, weaponSolidMat);
 
-      const barrelGeo = new THREE.BoxGeometry(0.04, 0.04, 0.3);
-      const barrel = new THREE.Mesh(barrelGeo, weaponSolidMat);
-      barrel.position.set(0, 0.02, -0.35);
+      const gripGeo = new THREE.BoxGeometry(0.05, 0.15, 0.06);
+      const grip = new THREE.Mesh(gripGeo, weaponSolidMat);
+      grip.position.set(0, -0.1, 0.1);
+      grip.rotation.x = 0.1;
 
-      const magGeo = new THREE.BoxGeometry(0.06, 0.2, 0.1);
-      const mag = new THREE.Mesh(magGeo, weaponSolidMat);
-      mag.position.set(0, -0.15, -0.1);
+      const magGeo = new THREE.BoxGeometry(0.04, 0.2, 0.08);
+      const mag = new THREE.Mesh(magGeo, weaponMetalMat);
+      mag.position.set(0, -0.15, -0.05);
+      mag.rotation.x = -0.1;
 
-      const stripGeo = new THREE.BoxGeometry(0.11, 0.02, 0.3);
-      const strip = new THREE.Mesh(stripGeo, weaponNeonMat);
-      strip.position.set(0, 0.05, 0);
+      const barrelGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.2, 8);
+      const barrel = new THREE.Mesh(barrelGeo, weaponMetalMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.02, -0.25);
 
-      group.add(body, barrel, mag, strip);
-      group.position.set(0.3, -0.25, -0.5);
+      const sightGeo = new THREE.BoxGeometry(0.04, 0.06, 0.06);
+      const sight = new THREE.Mesh(sightGeo, weaponSolidMat);
+      sight.position.set(0, 0.08, 0.05);
+
+      const dotGeo = new THREE.PlaneGeometry(0.02, 0.02);
+      const dot = new THREE.Mesh(dotGeo, weaponNeonMat);
+      dot.position.set(0, 0.09, 0.02);
+
+      const sideStripGeo = new THREE.BoxGeometry(0.09, 0.01, 0.2);
+      const sideStrip = new THREE.Mesh(sideStripGeo, weaponNeonMat);
+      sideStrip.position.set(0, 0.02, -0.05);
+
+      group.add(body, grip, mag, barrel, sight, dot, sideStrip);
+      group.position.set(0.25, -0.2, -0.4);
       break;
     }
     case 'shotgun': {
-      const bodyGeo = new THREE.BoxGeometry(0.12, 0.18, 0.5);
-      const body = new THREE.Mesh(bodyGeo, weaponSolidMat);
+      const stockGeo = new THREE.BoxGeometry(0.06, 0.15, 0.25);
+      const stock = new THREE.Mesh(stockGeo, weaponSolidMat);
+      stock.position.set(0, -0.05, 0.2);
 
-      const barrelGeo = new THREE.BoxGeometry(0.08, 0.08, 0.6);
+      const bodyGeo = new THREE.BoxGeometry(0.08, 0.12, 0.4);
+      const body = new THREE.Mesh(bodyGeo, weaponMetalMat);
+      body.position.set(0, 0, -0.1);
+
+      const barrelGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.5, 12);
       const barrel = new THREE.Mesh(barrelGeo, weaponSolidMat);
-      barrel.position.set(0, 0.05, -0.55);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.02, -0.4);
 
-      const pumpGeo = new THREE.BoxGeometry(0.1, 0.1, 0.2);
+      const tubeGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.4, 8);
+      const tube = new THREE.Mesh(tubeGeo, weaponSolidMat);
+      tube.rotation.x = Math.PI / 2;
+      tube.position.set(0, -0.03, -0.35);
+
+      const pumpGeo = new THREE.BoxGeometry(0.1, 0.08, 0.15);
       const pump = new THREE.Mesh(pumpGeo, weaponSolidMat);
-      pump.position.set(0, -0.05, -0.4);
+      pump.position.set(0, -0.04, -0.25);
 
-      const neonRingGeo = new THREE.BoxGeometry(0.09, 0.09, 0.05);
-      const neonRing = new THREE.Mesh(neonRingGeo, weaponNeonMat);
-      neonRing.position.set(0, 0.05, -0.8);
+      const glowingRingGeo = new THREE.TorusGeometry(0.035, 0.01, 8, 16);
+      const glowingRing = new THREE.Mesh(glowingRingGeo, weaponNeonMat);
+      glowingRing.position.set(0, 0.02, -0.6);
 
-      group.add(body, barrel, pump, neonRing);
-      group.position.set(0.35, -0.3, -0.6);
+      group.add(stock, body, barrel, tube, pump, glowingRing);
+      group.position.set(0.3, -0.25, -0.4);
       break;
     }
     case 'sniper': {
-      const bodyGeo = new THREE.BoxGeometry(0.08, 0.15, 0.6);
-      const body = new THREE.Mesh(bodyGeo, weaponSolidMat);
+      const stockGeo = new THREE.BoxGeometry(0.05, 0.15, 0.3);
+      const stock = new THREE.Mesh(stockGeo, weaponSolidMat);
+      stock.position.set(0, -0.05, 0.2);
 
-      const barrelGeo = new THREE.BoxGeometry(0.03, 0.03, 1.2);
+      const bodyGeo = new THREE.BoxGeometry(0.06, 0.1, 0.4);
+      const body = new THREE.Mesh(bodyGeo, weaponMetalMat);
+      body.position.set(0, 0, -0.15);
+
+      const barrelGeo = new THREE.CylinderGeometry(0.015, 0.02, 0.8, 8);
       const barrel = new THREE.Mesh(barrelGeo, weaponSolidMat);
-      barrel.position.set(0, 0.02, -0.9);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0, -0.7);
 
-      const scopeGeo = new THREE.BoxGeometry(0.05, 0.05, 0.4);
-      const scope = new THREE.Mesh(scopeGeo, weaponSolidMat);
-      scope.position.set(0, 0.15, -0.1);
+      const muzzleGeo = new THREE.BoxGeometry(0.04, 0.04, 0.08);
+      const muzzle = new THREE.Mesh(muzzleGeo, weaponMetalMat);
+      muzzle.position.set(0, 0, -1.1);
 
-      const scopeNeonGeo = new THREE.BoxGeometry(0.06, 0.06, 0.02);
-      const scopeNeon = new THREE.Mesh(scopeNeonGeo, weaponNeonMat);
-      scopeNeon.position.set(0, 0.15, -0.3);
+      const scopeBaseGeo = new THREE.BoxGeometry(0.04, 0.05, 0.2);
+      const scopeBase = new THREE.Mesh(scopeBaseGeo, weaponSolidMat);
+      scopeBase.position.set(0, 0.07, -0.1);
 
-      group.add(body, barrel, scope, scopeNeon);
-      group.position.set(0.3, -0.25, -0.6);
+      const scopeTubeGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.3, 12);
+      const scopeTube = new THREE.Mesh(scopeTubeGeo, weaponMetalMat);
+      scopeTube.rotation.x = Math.PI / 2;
+      scopeTube.position.set(0, 0.12, -0.1);
+
+      const lensGeo = new THREE.PlaneGeometry(0.05, 0.05);
+      const lens = new THREE.Mesh(lensGeo, weaponNeonMat);
+      lens.position.set(0, 0.12, 0.055);
+
+      const bipodGeo = new THREE.BoxGeometry(0.15, 0.02, 0.02);
+      const bipod = new THREE.Mesh(bipodGeo, weaponSolidMat);
+      bipod.position.set(0, -0.05, -0.8);
+
+      group.add(stock, body, barrel, muzzle, scopeBase, scopeTube, lens, bipod);
+      group.position.set(0.25, -0.2, -0.4);
       break;
     }
   }

@@ -4,7 +4,8 @@ import { checkLineOfSight, findPath, grid, GRID_SIZE, CELL_SIZE, OFFSET, mapData
 export class Bot {
   constructor() {
     this.id = 'bot_' + randomUUID().substring(0, 8);
-    this.y = 1; // Altura dos olhos
+    this.y = 1; // Altura
+    this.vY = 0; // Velocidade vertical
     this.rY = Math.random() * Math.PI * 2;
     this.hp = 100;
     this.state = 'WANDER'; // WANDER, CHASE, SHOOT, INATIVO
@@ -57,29 +58,45 @@ export class Bot {
     let nextX = this.x + stepX;
     let nextZ = this.z + stepZ;
     
-    // Colisão AABB com deslizamento (Wall-Sliding)
+    // Colisão AABB com deslizamento (Wall-Sliding) e pulo
     const pSize = 0.4;
     let colX = false;
     let colZ = false;
+    let jumpRequested = false;
     
     for (const aabb of mapData) {
       if (aabb.maxY <= 0.5) continue; // Ignora obstáculos baixos
       if (this.y >= aabb.maxY) continue; // Ignora se o bot estiver acima da cobertura
       
+      let hitsWall = false;
       // Testa eixo X
       if (nextX + pSize > aabb.minX && nextX - pSize < aabb.maxX &&
           this.z + pSize > aabb.minZ && this.z - pSize < aabb.maxZ) {
         colX = true;
+        hitsWall = true;
       }
       // Testa eixo Z
       if (this.x + pSize > aabb.minX && this.x - pSize < aabb.maxX &&
           nextZ + pSize > aabb.minZ && nextZ - pSize < aabb.maxZ) {
         colZ = true;
+        hitsWall = true;
+      }
+      
+      // Pular meia-parede
+      if (hitsWall && aabb.maxY <= 1.5 && this.y === 1.0) {
+        jumpRequested = true;
       }
     }
     
     if (!colX) this.x = nextX;
     if (!colZ) this.z = nextZ;
+    
+    if (jumpRequested) {
+      this.vY = 18;
+      this.y += 0.1;
+      colX = false; // Ignora colisão no tick atual para passar por cima
+      colZ = false;
+    }
     
     if (colX && colZ) {
       // Bloqueado nos dois eixos (preso em quina cega), forçar recálculo
@@ -110,7 +127,26 @@ export class Bot {
     return false;
   }
 
+  investigateSound(sndX, sndZ, sourceId) {
+    if (this.state === 'WANDER') {
+      this.state = 'CHASE';
+      this.path = findPath(this.x, this.z, sndX, sndZ);
+      this.pathIndex = 1;
+      this.pathRecalcTimer = 30;
+    }
+  }
+
   update(players, allBots, killfeedCallback) {
+    // Gravidade
+    if (this.y > 1.0) {
+      this.vY -= 1.2;
+      this.y += this.vY * 0.033;
+      if (this.y < 1.0) {
+        this.y = 1.0;
+        this.vY = 0;
+      }
+    }
+
     // === Gerenciamento de Morte e Respawn ===
     if (this.hp <= 0 && this.state !== 'INATIVO') {
       this.state = 'INATIVO';
@@ -267,6 +303,18 @@ export class BotManager {
 
     for (const botId in this.bots) {
       this.bots[botId].update(players, this.bots, killfeedCallback);
+    }
+  }
+
+  onSound(x, z, sourceId) {
+    for (const botId in this.bots) {
+      const b = this.bots[botId];
+      if (b.state !== 'INATIVO' && b.state !== 'SHOOT') {
+        const dist = Math.hypot(b.x - x, b.z - z);
+        if (dist < 40) {
+          b.investigateSound(x, z, sourceId);
+        }
+      }
     }
   }
 

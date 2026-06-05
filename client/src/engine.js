@@ -65,6 +65,32 @@ export class Engine {
     });
   }
 
+  createGridTexture(lineColor, bgColor) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, 512, 512);
+    
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(0, 0, 512, 512);
+    
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(256, 0); ctx.lineTo(256, 512);
+    ctx.moveTo(0, 256); ctx.lineTo(512, 256);
+    ctx.stroke();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    return texture;
+  }
+
   setGraphicsQuality(level) {
     if (this.qualityLevel === level) return;
     this.qualityLevel = level;
@@ -139,9 +165,11 @@ export class Engine {
     dirLight.shadow.mapSize.height = 1024;
     this.scene.add(dirLight);
 
-    // Solid dark floor
+    // Solid dark floor with Grid Texture
+    const floorTex = this.createGridTexture('#005522', '#050505');
+    floorTex.repeat.set(MAP_SIZE / 2, MAP_SIZE / 2);
     const floorGeo = new THREE.PlaneGeometry(MAP_SIZE * 2, MAP_SIZE * 2);
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0x080808 });
+    const floorMat = new THREE.MeshLambertMaterial({ map: floorTex, color: 0x888888 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
@@ -176,8 +204,9 @@ export class Engine {
         this.scene.add(halo);
       }
 
+      const wallTex = this.createGridTexture('#00aaff', '#080808');
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-      const boxMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+      const boxMat = new THREE.MeshLambertMaterial({ map: wallTex, color: 0x666666 });
 
       this.instancedMesh = new THREE.InstancedMesh(boxGeo, boxMat, mapData.length);
       this.instancedMesh.castShadow = true;
@@ -290,21 +319,25 @@ export class Engine {
 
       if (!this.entities[id]) {
         const group = new THREE.Group();
-        const geo = new THREE.BoxGeometry(1, 2, 1);
-        const edgesGeo = new THREE.EdgesGeometry(geo);
         
         const mat = serverEnt.isBot ? this.botMat : this.playerMat;
-        const edgeMat = serverEnt.isBot ? this.botEdgeMat : this.playerEdgeMat;
         
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        const edges = new THREE.LineSegments(edgesGeo, edgeMat);
-        edges.visible = this.qualityLevel !== 'POTATO';
+        const bodyGeo = new THREE.CapsuleGeometry(0.35, 0.8, 4, 16);
+        const body = new THREE.Mesh(bodyGeo, mat);
+        body.position.y = 0.75;
+        body.castShadow = true;
+        body.receiveShadow = true;
         
-        group.add(mesh);
-        group.add(edges);
-        group.userData.edges = edges;
+        const headGeo = new THREE.SphereGeometry(0.3, 16, 16);
+        const head = new THREE.Mesh(headGeo, mat);
+        head.position.y = 1.7;
+        head.castShadow = true;
+        head.receiveShadow = true;
+        
+        group.add(body);
+        group.add(head);
+        
+        // Remove Edges since we have a better model and textures now
         
         const hpBar = this.createHPBar();
         group.add(hpBar);
@@ -312,15 +345,18 @@ export class Engine {
         
         const weaponId = serverEnt.weapon || (serverEnt.isBot ? 'smg' : 'pistol');
         const weaponModel = createWeaponModel(weaponId);
-        weaponModel.position.set(0, 0.2, -0.6);
+        weaponModel.position.set(0.3, 1.0, -0.6);
         group.add(weaponModel);
-        group.userData.weaponModel = weaponModel;
         
         group.position.set(serverEnt.x, serverEnt.y, serverEnt.z);
         group.rotation.y = serverEnt.rY;
         
-        group.userData.mesh = mesh;
+        group.userData.body = body;
+        group.userData.head = head;
+        group.userData.weaponModel = weaponModel;
+        group.userData.mesh = body; // For raycasting
         group.userData.isBot = serverEnt.isBot;
+        group.userData.walkCycle = Math.random() * Math.PI * 2;
         
         group.userData.targetPosition = new THREE.Vector3(serverEnt.x, serverEnt.y, serverEnt.z);
         group.userData.targetRotationY = serverEnt.rY;
@@ -381,6 +417,14 @@ export class Engine {
 
     const start = new THREE.Vector3(0.3, -0.25, -0.9);
     start.applyMatrix4(this.camera.matrixWorld);
+    
+    // Muzzle Flash
+    if (this.qualityLevel !== 'POTATO') {
+      const flash = new THREE.PointLight(0xffffaa, 8, 25);
+      flash.position.copy(start);
+      this.scene.add(flash);
+      setTimeout(() => this.scene.remove(flash), 50);
+    }
     
     for (let p = 0; p < pellets; p++) {
       const direction = new THREE.Vector3(0, 0, -1);
@@ -499,8 +543,26 @@ export class Engine {
   render(deltaTime, isMoving, shakeOffset, isSprinting, isLobbyMode = false, lobbyTime = 0) {
     for (const id in this.entities) {
       const group = this.entities[id];
+      const dist = group.position.distanceTo(group.userData.targetPosition);
+      
       group.position.lerp(group.userData.targetPosition, deltaTime * 15);
       group.rotation.y = THREE.MathUtils.lerp(group.rotation.y, group.userData.targetRotationY, deltaTime * 15);
+      
+      // Animation Bobbing
+      if (dist > 0.05) {
+        group.userData.walkCycle += deltaTime * 15;
+        group.userData.body.rotation.z = Math.sin(group.userData.walkCycle) * 0.08;
+        group.userData.head.position.y = 1.7 + Math.abs(Math.cos(group.userData.walkCycle)) * 0.08;
+        if (group.userData.weaponModel) {
+          group.userData.weaponModel.position.y = 1.0 + Math.abs(Math.cos(group.userData.walkCycle)) * 0.08;
+        }
+      } else {
+        group.userData.body.rotation.z = THREE.MathUtils.lerp(group.userData.body.rotation.z, 0, deltaTime * 10);
+        group.userData.head.position.y = THREE.MathUtils.lerp(group.userData.head.position.y, 1.7, deltaTime * 10);
+        if (group.userData.weaponModel) {
+          group.userData.weaponModel.position.y = THREE.MathUtils.lerp(group.userData.weaponModel.position.y, 1.0, deltaTime * 10);
+        }
+      }
       
       if (group.userData.hpBar && !isLobbyMode) {
         group.userData.hpBar.lookAt(this.camera.position);
