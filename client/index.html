@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NULL - COMPETITIVE FPS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <!-- CRT Scanlines Overlay -->
+    <div class="crt"></div>
+
+    <!-- Container para o Three.js -->
+    <div id="app"></div>
+
+    <!-- UI Overlay: Lobby Hacker Premium OS -->
+    <div id="lobby">
+      <div class="os-window">
+        <div class="os-header">
+          <span class="os-title">NULL_FPS_TERMINAL // v4.5.1</span>
+          <div class="os-controls">
+            <span class="ctrl-btn"></span>
+            <span class="ctrl-btn"></span>
+            <span class="ctrl-btn"></span>
+          </div>
+        </div>
+        
+        <div class="os-body">
+          <div class="os-branding">
+            <h1 class="os-logo glitch" data-text="NULL">NULL</h1>
+            <p class="os-desc">TACTICAL ESPORTS ARENA</p>
+          </div>
+          
+          <div class="os-login">
+            <label class="os-label">OPERATOR_ID:</label>
+            <div class="os-input-box">
+              <span class="os-prefix">></span>
+              <input type="text" id="nickname" value="Operador" autocomplete="off" spellcheck="false" />
+              <span class="os-cursor">_</span>
+            </div>
+            
+            <button id="btn-enter" class="os-btn">
+              <span>INITIALIZE_CONNECTION</span>
+            </button>
+          </div>
+          
+          <div class="os-footer">
+            <span>SECURE LINK: ENCRYPTED</span>
+            <span>SERVER: CONNECTED</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UI Overlay: HUD Principal -->
+    <div id="hud" class="hidden">
+      <!-- Minimap Radar -->
+      <canvas id="minimap"></canvas>
+      
+      <!-- Killfeed -->
+      <div id="killfeed"></div>
+
+      <!-- Crosshair -->
+      <div class="crosshair">
+        <div class="cross-c"></div>
+        <div class="cross-l"></div>
+        <div class="cross-r"></div>
+        <div class="cross-t"></div>
+        <div class="cross-b"></div>
+      </div>
+      
+      <!-- Weapon Inventory HUD (Central Inferior) -->
+      <div id="inventory-hud" class="inventory-container">
+        <div class="weapon-slot" id="slot-1">
+          <span class="slot-key">[1]</span>
+          <span class="slot-name">PISTOL</span>
+        </div>
+        <div class="weapon-slot" id="slot-2">
+          <span class="slot-key">[2]</span>
+          <span class="slot-name">SMG</span>
+        </div>
+        <div class="weapon-slot" id="slot-3">
+          <span class="slot-key">[3]</span>
+          <span class="slot-name">SHOTGUN</span>
+        </div>
+        <div class="weapon-slot" id="slot-4">
+          <span class="slot-key">[4]</span>
+          <span class="slot-name">SNIPER</span>
+        </div>
+      </div>
+
+      <!-- Status Bar Inferior Direito (HP, Ammo) -->
+      <div class="status-bar">
+        <div class="status-section">
+          <span class="status-label">SYS.HP</span>
+          <span id="ui-hp" class="status-value">100</span>
+        </div>
+        <div class="status-section ammo-section">
+          <span class="status-label">SYS.AMMO</span>
+          <span id="ui-ammo" class="status-value">30</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- UI Overlay: Scoreboard (segurando TAB) -->
+    <div id="scoreboard-overlay" class="hidden">
+      <div class="scoreboard-container">
+        <h2 class="glitch-small" data-text="REGISTRO DE REDE">REGISTRO DE REDE</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>NODE</th>
+              <th>OPERADOR</th>
+              <th>EXECUÇÕES</th>
+              <th>FALHAS</th>
+            </tr>
+          </thead>
+          <tbody id="scoreboard-tbody">
+            <!-- Dinâmico -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tela de Morte -->
+    <div id="death-screen" class="hidden">
+      <div class="death-panel">
+        <h2 class="glitch" data-text="FATAL ERROR">FATAL ERROR</h2>
+        <p>CONEXÃO NEURAL PERDIDA. REINICIANDO...</p>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "null-fps-server",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@geckos.io/server": "^3.0.1"
+  }
+}

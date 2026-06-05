@@ -1,0 +1,29 @@
+{
+  "name": "null-fps",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Multiplayer FPS browser game built with Three.js and Geckos.io — hacker/cyberpunk aesthetic, procedural maps, AI bots, weapon system and low-end GPU optimized.",
+  "author": "Pedro Julio",
+  "license": "MIT",
+  "keywords": [
+    "fps",
+    "multiplayer",
+    "threejs",
+    "browser-game",
+    "webgl",
+    "geckos",
+    "udp",
+    "procedural-generation",
+    "cyberpunk"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && node server.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "start": "concurrently \"npm run dev:server\" \"npm run dev:client\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

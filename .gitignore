@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Vite
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test artifacts
+test-*.png
+test-*.cjs
+screenshot*.png
+
+# Environment
+.env
+.env.*
+
+# Lock files (keep only root)
+client/package-lock.json
+server/package-lock.json
