@@ -32,6 +32,23 @@ export class Engine {
     this.recoil = 0;
     this.bobTime = 0;
     
+    // Memory Optimization: Pre-instantiate geometries and materials
+    this.particleGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    this.particleMatGreen = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
+    this.particleMatRed = new THREE.MeshBasicMaterial({ color: 0xff0033 });
+    
+    this.decalGeo = new THREE.PlaneGeometry(0.2, 0.2);
+    this.decalMat = new THREE.MeshBasicMaterial({ color: 0x00ff66, depthWrite: false });
+
+    // Pre-instantiate entity materials
+    this.botMat = new THREE.MeshLambertMaterial({ color: 0x220000 });
+    this.playerMat = new THREE.MeshLambertMaterial({ color: 0x002211 });
+    this.botEdgeMat = new THREE.LineBasicMaterial({ color: 0xff0033 });
+    this.playerEdgeMat = new THREE.LineBasicMaterial({ color: 0x00ff66 });
+    
+    // Shared tracer material
+    this.tracerMat = new THREE.LineBasicMaterial({ color: 0x00ff66, transparent: true, opacity: 0.8 });
+
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
@@ -155,6 +172,9 @@ export class Engine {
   }
 
   updateHPBar(sprite, hp) {
+    if (sprite.userData.lastHp === hp) return; // Cache: Don't redraw if HP hasn't changed
+    sprite.userData.lastHp = hp;
+
     const ctx = sprite.userData.ctx;
     ctx.clearRect(0, 0, 64, 16);
     ctx.fillStyle = '#0a0a0a';
@@ -187,11 +207,8 @@ export class Engine {
         const geo = new THREE.BoxGeometry(1, 2, 1);
         const edgesGeo = new THREE.EdgesGeometry(geo);
         
-        const solidColor = serverEnt.isBot ? 0x220000 : 0x002211;
-        const neonColor = serverEnt.isBot ? 0xff0033 : 0x00ff66;
-        
-        const mat = new THREE.MeshLambertMaterial({ color: solidColor });
-        const edgeMat = new THREE.LineBasicMaterial({ color: neonColor });
+        const mat = serverEnt.isBot ? this.botMat : this.playerMat;
+        const edgeMat = serverEnt.isBot ? this.botEdgeMat : this.playerEdgeMat;
         
         const mesh = new THREE.Mesh(geo, mat);
         const edges = new THREE.LineSegments(edgesGeo, edgeMat);
@@ -322,19 +339,15 @@ export class Engine {
   }
 
   spawnTracer(start, end) {
-    // Tracer with Basic material for Bloom
-    const mat = new THREE.LineBasicMaterial({ color: 0x00ff66, transparent: true, opacity: 0.8 });
     const points = [start, end];
     const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const line = new THREE.Line(geo, mat);
+    const line = new THREE.Line(geo, this.tracerMat);
     this.scene.add(line);
     this.tracers.push({ line, life: 0.05 });
   }
 
   spawnDecal(position, normal) {
-    const geo = new THREE.PlaneGeometry(0.2, 0.2);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00ff66, depthWrite: false });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = new THREE.Mesh(this.decalGeo, this.decalMat);
     
     mesh.position.copy(position).add(normal.clone().multiplyScalar(0.01));
     mesh.lookAt(position.clone().add(normal));
@@ -344,11 +357,10 @@ export class Engine {
   }
 
   spawnParticles(position, colorHex) {
-    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-    const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+    const mat = colorHex === 0xff0033 ? this.particleMatRed : this.particleMatGreen;
     
     for (let i = 0; i < 20; i++) {
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(this.particleGeo, mat);
       mesh.position.copy(position);
       
       const velocity = new THREE.Vector3(
