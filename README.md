@@ -149,5 +149,5 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 <div align="center">
-  <sub>Built with ⚡ by <a href="https://github.com/YOUR_USERNAME">Pedro Julio</a></sub>
+  <sub>Built with ⚡ by <a href="https://github.com/YOUR_USERNAME">zezortdx</a></sub>
 </div>
