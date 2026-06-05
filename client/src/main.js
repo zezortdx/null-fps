@@ -474,13 +474,15 @@ function updateAutoGraphics(deltaTime) {
       if (timeBelow45 > 3.0) { 
         if (engine.qualityLevel === 'HIGH') engine.setGraphicsQuality('MEDIUM');
         else if (engine.qualityLevel === 'MEDIUM') engine.setGraphicsQuality('LOW');
+        else if (engine.qualityLevel === 'LOW') engine.setGraphicsQuality('POTATO');
         timeBelow45 = 0; 
       }
     } else if (avgFps >= 55) {
       timeAbove55 += deltaTime;
       timeBelow45 = 0;
       if (timeAbove55 > 10.0) { 
-        if (engine.qualityLevel === 'LOW') engine.setGraphicsQuality('MEDIUM');
+        if (engine.qualityLevel === 'POTATO') engine.setGraphicsQuality('LOW');
+        else if (engine.qualityLevel === 'LOW') engine.setGraphicsQuality('MEDIUM');
         else if (engine.qualityLevel === 'MEDIUM') engine.setGraphicsQuality('HIGH');
         timeAbove55 = 0; 
       }

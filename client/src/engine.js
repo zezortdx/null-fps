@@ -66,23 +66,40 @@ export class Engine {
     this.qualityLevel = level;
     console.log(`[Engine] Graphics Quality auto-scaled to: ${level}`);
 
-    if (level === 'LOW') {
+    if (level === 'POTATO') {
+      this.renderer.setPixelRatio(0.25);
+      this.renderer.shadowMap.autoUpdate = false;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.particleCount = 0;
+      this.scene.fog.density = 0.08;
+    } else if (level === 'LOW') {
       this.renderer.setPixelRatio(0.5);
       this.renderer.shadowMap.autoUpdate = false;
       this.renderer.shadowMap.needsUpdate = true;
       this.particleCount = 5;
+      this.scene.fog.density = 0.015;
     } else if (level === 'MEDIUM') {
       this.renderer.setPixelRatio(0.75);
       this.renderer.shadowMap.autoUpdate = false;
       this.renderer.shadowMap.needsUpdate = true;
       this.particleCount = 10;
+      this.scene.fog.density = 0.015;
     } else if (level === 'HIGH') {
       const pr = window.devicePixelRatio > 1 ? 1.0 : window.devicePixelRatio;
       this.renderer.setPixelRatio(pr);
       this.renderer.shadowMap.autoUpdate = true;
       this.particleCount = 20;
+      this.scene.fog.density = 0.015;
     }
     
+    const showEdges = level !== 'POTATO';
+    if (this.gridHelper) this.gridHelper.visible = showEdges;
+    if (this.mapEdges) this.mapEdges.visible = showEdges;
+    
+    Object.values(this.entities).forEach(group => {
+      if (group.userData.edges) group.userData.edges.visible = showEdges;
+    });
+
     this.scene.traverse((child) => {
       if (child.isMesh && child.material) child.material.needsUpdate = true;
     });
@@ -129,11 +146,11 @@ export class Engine {
     // Glowing Neon Grid floor
     const gridHelper = new THREE.GridHelper(MAP_SIZE, MAP_SIZE / 2, 0x00ff66, 0x003311);
     gridHelper.position.y = 0.01;
-    
-    // Make grid lines glow by forcing it to use Basic material (no lighting)
     gridHelper.material.opacity = 0.4;
     gridHelper.material.transparent = true;
+    gridHelper.visible = this.qualityLevel !== 'POTATO';
     this.scene.add(gridHelper);
+    this.gridHelper = gridHelper;
 
     if (mapData && mapData.length > 0) {
       const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -190,7 +207,9 @@ export class Engine {
       // Increase color intensity to trigger Bloom
       const edgeMat = new THREE.LineBasicMaterial({ color: 0x00ff66, transparent: true, opacity: 0.3 });
       const mergedEdges = new THREE.LineSegments(edgeGeo, edgeMat);
+      mergedEdges.visible = this.qualityLevel !== 'POTATO';
       this.scene.add(mergedEdges);
+      this.mapEdges = mergedEdges;
     }
   }
 
@@ -258,9 +277,11 @@ export class Engine {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         const edges = new THREE.LineSegments(edgesGeo, edgeMat);
+        edges.visible = this.qualityLevel !== 'POTATO';
         
         group.add(mesh);
         group.add(edges);
+        group.userData.edges = edges;
         
         const hpBar = this.createHPBar();
         group.add(hpBar);
