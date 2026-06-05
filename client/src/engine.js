@@ -13,9 +13,14 @@ export class Engine {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(1); // Force 1.0 pixel ratio for low-end PCs
+    this.renderer.setPixelRatio(window.devicePixelRatio > 1 ? 1 : window.devicePixelRatio); 
     this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     canvasContainer.appendChild(this.renderer.domElement);
+    
+    this.qualityLevel = 'HIGH';
+    this.particleCount = 20;
 
     this.entities = {}; 
     this.particles = [];
@@ -56,6 +61,33 @@ export class Engine {
     });
   }
 
+  setGraphicsQuality(level) {
+    if (this.qualityLevel === level) return;
+    this.qualityLevel = level;
+    console.log(`[Engine] Graphics Quality auto-scaled to: ${level}`);
+
+    if (level === 'LOW') {
+      this.renderer.setPixelRatio(0.5);
+      this.renderer.shadowMap.autoUpdate = false;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.particleCount = 5;
+    } else if (level === 'MEDIUM') {
+      this.renderer.setPixelRatio(0.75);
+      this.renderer.shadowMap.autoUpdate = false;
+      this.renderer.shadowMap.needsUpdate = true;
+      this.particleCount = 10;
+    } else if (level === 'HIGH') {
+      const pr = window.devicePixelRatio > 1 ? 1.0 : window.devicePixelRatio;
+      this.renderer.setPixelRatio(pr);
+      this.renderer.shadowMap.autoUpdate = true;
+      this.particleCount = 20;
+    }
+    
+    this.scene.traverse((child) => {
+      if (child.isMesh && child.material) child.material.needsUpdate = true;
+    });
+  }
+
   setWeaponModel(weaponId) {
     while(this.weaponGroup.children.length > 0) {
       this.weaponGroup.remove(this.weaponGroup.children[0]);
@@ -75,6 +107,15 @@ export class Engine {
 
     const dirLight = new THREE.DirectionalLight(0x00ff66, 0.6);
     dirLight.position.set(20, 40, 20);
+    dirLight.castShadow = true;
+    dirLight.shadow.camera.top = 50;
+    dirLight.shadow.camera.bottom = -50;
+    dirLight.shadow.camera.left = -50;
+    dirLight.shadow.camera.right = 50;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 150;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
     this.scene.add(dirLight);
 
     // Solid dark floor
@@ -82,6 +123,7 @@ export class Engine {
     const floorMat = new THREE.MeshLambertMaterial({ color: 0x080808 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
     this.scene.add(floor);
 
     // Glowing Neon Grid floor
@@ -98,6 +140,8 @@ export class Engine {
       const boxMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
 
       this.instancedMesh = new THREE.InstancedMesh(boxGeo, boxMat, mapData.length);
+      this.instancedMesh.castShadow = true;
+      this.instancedMesh.receiveShadow = true;
 
       const dummy = new THREE.Object3D();
       const allEdgePositions = []; 
@@ -211,6 +255,8 @@ export class Engine {
         const edgeMat = serverEnt.isBot ? this.botEdgeMat : this.playerEdgeMat;
         
         const mesh = new THREE.Mesh(geo, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         const edges = new THREE.LineSegments(edgesGeo, edgeMat);
         
         group.add(mesh);
@@ -359,7 +405,7 @@ export class Engine {
   spawnParticles(position, colorHex) {
     const mat = colorHex === 0xff0033 ? this.particleMatRed : this.particleMatGreen;
     
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < this.particleCount; i++) {
       const mesh = new THREE.Mesh(this.particleGeo, mat);
       mesh.position.copy(position);
       

@@ -445,11 +445,59 @@ function updateScoreboard(entities) {
   });
 }
 
+// --- Auto-Scaling Graphics System ---
+const dtHistory = [];
+let dtHistoryIndex = 0;
+const DT_HISTORY_SIZE = 60;
+let timeBelow45 = 0;
+let timeAbove55 = 0;
+
+function updateAutoGraphics(deltaTime) {
+  if (deltaTime > 0.1) return; // Ignora travamentos gigantes ou tab minimizada
+
+  if (dtHistory.length < DT_HISTORY_SIZE) {
+    dtHistory.push(deltaTime);
+  } else {
+    dtHistory[dtHistoryIndex] = deltaTime;
+    dtHistoryIndex = (dtHistoryIndex + 1) % DT_HISTORY_SIZE;
+  }
+
+  if (dtHistory.length === DT_HISTORY_SIZE) {
+    let sum = 0;
+    for(let i=0; i<DT_HISTORY_SIZE; i++) sum += dtHistory[i];
+    const avgDt = sum / DT_HISTORY_SIZE;
+    const avgFps = 1 / avgDt;
+
+    if (avgFps < 45) {
+      timeBelow45 += deltaTime;
+      timeAbove55 = 0;
+      if (timeBelow45 > 3.0) { 
+        if (engine.qualityLevel === 'HIGH') engine.setGraphicsQuality('MEDIUM');
+        else if (engine.qualityLevel === 'MEDIUM') engine.setGraphicsQuality('LOW');
+        timeBelow45 = 0; 
+      }
+    } else if (avgFps >= 55) {
+      timeAbove55 += deltaTime;
+      timeBelow45 = 0;
+      if (timeAbove55 > 10.0) { 
+        if (engine.qualityLevel === 'LOW') engine.setGraphicsQuality('MEDIUM');
+        else if (engine.qualityLevel === 'MEDIUM') engine.setGraphicsQuality('HIGH');
+        timeAbove55 = 0; 
+      }
+    } else {
+      timeBelow45 = 0;
+      timeAbove55 = 0;
+    }
+  }
+}
+
 function gameLoop(now) {
   requestAnimationFrame(gameLoop);
 
   const deltaTime = (now - lastTime) / 1000;
   lastTime = now;
+
+  updateAutoGraphics(deltaTime);
 
   if (isPlaying) {
     // Passive Healing
