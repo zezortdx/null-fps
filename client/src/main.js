@@ -39,6 +39,8 @@ const localPlayer = {
 };
 
 let matchTimer = 300; // 5 minute rounds
+let isPlaying = false;
+let mapTypeUI = 'CLASSIC';
 
 // UI Elements
 const uiHp = document.getElementById('ui-hp');
@@ -67,7 +69,6 @@ function updateHpUI(hp) {
 let engine;
 let channel;
 let isConnected = false;
-let isPlaying = false;
 let lobbyTime = 0;
 let lastTime = performance.now();
 let serverEntities = {};
@@ -113,19 +114,22 @@ function connectBackground() {
     isConnected = true;
     
     channel.on('init', data => {
-      console.log(`[NULL] Connected! Seed: ${data.seed} | ID: ${data.id}`);
-      localPlayer.id = data.id;
-      
-      generateMap(data.seed);
+      console.log('[NULL] Connected! Seed:', data.seed, '| ID:', data.id, '| Map:', data.mapType);
+      mapTypeUI = data.mapType;
+      generateMap(data.seed, data.mapType);
       engine.setupWorld(); // Generate world meshes now that mapData exists
       engine.localId = data.id;
 
       // Lobby pronto para jogar
       btnEnter.disabled = false;
       const lbl = document.getElementById('btn-enter-label');
-      if (lbl) lbl.innerText = 'INICIAR CONEXÃO';
+      if (lbl) lbl.innerText = 'INICIAR LINK';
       const status = document.getElementById('os-status');
-      if (status) status.innerHTML = 'SERVER: <b style="color:var(--primary)">ONLINE</b>';
+      if (status) {
+        status.innerHTML = 'SERVER_LINK: ONLINE';
+        status.classList.remove('offline');
+        status.classList.add('online');
+      }
 
       // Update minimap with map data if already initialized
       if (minimap) minimap.setMapData(grid, GRID_SIZE, CELL_SIZE, OFFSET);
@@ -134,6 +138,25 @@ function connectBackground() {
     channel.on('stateUpdate', state => {
       serverEntities = { ...state.players, ...state.bots };
       serverMedkits = state.medkits || [];
+      
+      if (state.timer !== undefined) {
+        matchTimer = state.timer;
+        const mins = Math.floor(Math.max(0, matchTimer) / 60);
+        const secs = Math.floor(Math.max(0, matchTimer) % 60);
+        const timerUI = document.getElementById('match-timer');
+        if (timerUI) timerUI.innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      
+      if (!isPlaying) {
+        const lobbyPlayersUI = document.getElementById('lobby-players');
+        const lobbyMapTypeUI = document.getElementById('lobby-map-type');
+        if (lobbyPlayersUI) {
+          const playerCount = Object.values(state.players).filter(p => !p.isBot).length;
+          lobbyPlayersUI.innerText = playerCount;
+        }
+        if (lobbyMapTypeUI) lobbyMapTypeUI.innerText = mapTypeUI;
+      }
+      
       engine.updateEntities(state);
       if (isPlaying) {
         updateScoreboard(serverEntities);
@@ -197,17 +220,30 @@ function connectBackground() {
 
     channel.on('explosion', data => {
       if (!isPlaying) return;
-      // Visual flash
-      const flashDiv = document.createElement('div');
-      flashDiv.className = 'explosion-flash';
-      document.body.appendChild(flashDiv);
-      setTimeout(() => flashDiv.remove(), 500);
       
-      // Camera shake based on distance
+      // Flash effect if close
       const dist = Math.hypot(localPlayer.x - data.x, localPlayer.z - data.z);
       if (dist < data.radius * 2) {
-        feedback.triggerShake(0.3 * (1 - dist / (data.radius * 2)));
+        feedback.triggerDamageFlash();
+        feedback.triggerShake(0.08 * (1 - dist/(data.radius*2)));
       }
+    });
+
+    channel.on('map_reset', data => {
+      console.log('[NULL] Map Reset! New Seed:', data.seed, '| Type:', data.mapType);
+      mapTypeUI = data.mapType;
+      generateMap(data.seed, data.mapType);
+      engine.setupWorld(); // Re-render the map meshes
+      if (minimap) minimap.setMapData(grid, GRID_SIZE, CELL_SIZE, OFFSET);
+      
+      localPlayer.hp = 100;
+      localPlayer.totalKills = 0;
+      localPlayer.killStreak = 0;
+      updateHpUI(100);
+      showAnnouncement(`NOVO MAPA: ${data.mapType}`);
+      
+      // Respawn command sent by server, just ask for it to be safe
+      channel.emit('respawn');
     });
 
     channel.on('playerDied', data => {
@@ -762,7 +798,6 @@ function gameLoop(now) {
     if (minimap) minimap.update(localPlayer, serverEntities);
     
     // Match timer
-    matchTimer -= deltaTime;
     const timerEl = document.getElementById('match-timer');
     if (timerEl) {
       const mins = Math.floor(Math.max(0, matchTimer) / 60);
@@ -770,10 +805,12 @@ function gameLoop(now) {
       timerEl.innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
     }
     
-    // Kill/Death display
-    const kdDisplay = document.getElementById('kd-display');
-    if (kdDisplay) {
-      kdDisplay.innerText = `${localPlayer.totalKills} / ${localPlayer.totalDeaths}`;
+    const matchInfo = document.getElementById('match-info');
+    if (matchInfo) {
+      const kdDisplay = document.getElementById('kd-display');
+      if (kdDisplay) {
+        kdDisplay.innerText = `${localPlayer.totalKills} / ${localPlayer.totalDeaths || 0} - [${mapTypeUI}]`;
+      }
     }
   } else {
     lobbyTime += deltaTime;

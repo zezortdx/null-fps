@@ -4,10 +4,11 @@ import { generateMap, mapData, grid, GRID_SIZE, CELL_SIZE, OFFSET } from '../sha
 
 const io = geckos();
 
-// Gera seed procedural e constrói o mapa no servidor
-const MAP_SEED = Date.now() ^ (Math.random() * 0xFFFFFFFF >>> 0);
-generateMap(MAP_SEED);
-console.log(`[NULL] Mapa gerado | Seed: ${MAP_SEED} | AABBs: ${mapData.length}`);
+const mapTypes = ['CLASSIC', 'LABYRINTH', 'SNIPER_ALLEY', 'MICRO_ARENA'];
+let currentMapType = mapTypes[Math.floor(Math.random() * mapTypes.length)];
+let MAP_SEED = Date.now() ^ (Math.random() * 0xFFFFFFFF >>> 0);
+generateMap(MAP_SEED, currentMapType);
+console.log(`[NULL] Mapa gerado | Type: ${currentMapType} | Seed: ${MAP_SEED} | AABBs: ${mapData.length}`);
 
 io.listen(3000);
 console.log('[NULL] Servidor UDP rodando na porta 3000');
@@ -21,8 +22,8 @@ io.onConnection(channel => {
   
   channels[channel.id] = channel;
 
-  // Envia seed + ID para o cliente
-  channel.emit('init', { seed: MAP_SEED, id: channel.id }, { reliable: true });
+  // Envia seed + ID + mapType para o cliente
+  channel.emit('init', { seed: MAP_SEED, id: channel.id, mapType: currentMapType }, { reliable: true });
 
   // Inicializa o estado do player
   players[channel.id] = {
@@ -201,6 +202,31 @@ io.onConnection(channel => {
 const TICK_RATE = 30;
 const TICK_MS = 1000 / TICK_RATE;
 
+let matchTimer = 300; // 5 minutos por round
+
+function resetMatch() {
+  currentMapType = mapTypes[Math.floor(Math.random() * mapTypes.length)];
+  MAP_SEED = Date.now() ^ (Math.random() * 0xFFFFFFFF >>> 0);
+  generateMap(MAP_SEED, currentMapType);
+  matchTimer = 300;
+  
+  // Limpa bots para renascerem no novo mapa
+  for(let id in botManager.bots) {
+    delete botManager.bots[id];
+  }
+  
+  // Reseta HP e kills dos jogadores, marca para respawn
+  for(let id in players) {
+    players[id].hp = 100;
+    players[id].kills = 0;
+    players[id].deaths = 0;
+    players[id].dead = false;
+  }
+  
+  console.log(`[NULL] NOVO ROUND | Type: ${currentMapType}`);
+  io.room().emit('map_reset', { seed: MAP_SEED, mapType: currentMapType });
+}
+
 let medkits = [];
 let nextMedkitId = 1;
 
@@ -285,10 +311,17 @@ setInterval(() => {
     }
   }
 
+  matchTimer -= (TICK_MS / 1000);
+  if (matchTimer <= 0) {
+    resetMatch();
+    return; // Pula o resto desse tick
+  }
+
   const state = {
     players: players,
     bots: botsState,
-    medkits: medkits
+    medkits: medkits,
+    timer: matchTimer
   };
 
   io.room().emit('stateUpdate', state);

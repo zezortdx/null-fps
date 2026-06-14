@@ -17,40 +17,66 @@
     <!-- Container para o Three.js -->
     <div id="app"></div>
 
-    <!-- UI Overlay: Lobby Hacker Premium OS -->
+    <!-- UI Overlay: Lobby OS -->
     <div id="lobby">
+      <!-- Glow de Fundo -->
+      <div class="os-glow-backdrop"></div>
+      
+      <!-- Janela Principal -->
       <div class="os-window">
-        <div class="os-header">
-          <span class="os-title">NULL_FPS_TERMINAL // v5.0.0</span>
-          <div class="os-controls">
-            <span class="ctrl-btn"></span>
-            <span class="ctrl-btn"></span>
-            <span class="ctrl-btn"></span>
-          </div>
-        </div>
-        
-        <div class="os-body">
-          <div class="os-branding">
-            <h1 class="os-logo glitch" data-text="NULL">NULL</h1>
-            <p class="os-desc">ARENA TÁTICA CYBERPUNK</p>
-          </div>
-
-          <div class="os-login">
-            <label class="os-label">OPERATOR_ID:</label>
-            <div class="os-input-box">
-              <span class="os-prefix">></span>
-              <input type="text" id="nickname" value="Operador" autocomplete="off" spellcheck="false" />
-              <span class="os-cursor">_</span>
+        <div class="os-window-border"></div>
+        <div class="os-window-inner">
+          <div class="os-body">
+            <div class="os-branding">
+              <h1 class="os-logo glitch" data-text="NULL">NULL</h1>
+              <div class="os-desc-container">
+                <div class="os-desc-accent"></div>
+                <span class="os-desc">COMBAT SIMULATOR</span>
+                <div class="os-desc-accent"></div>
+              </div>
             </div>
 
-            <button id="btn-enter" class="os-btn" disabled>
-              <span id="btn-enter-label">ESTABELECENDO LINK...</span>
-            </button>
-          </div>
+            <div class="os-server-stats">
+              <div class="stat-item">
+                <div class="stat-icon"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+                <div class="stat-content">
+                  <span class="stat-label">MAPA ATUAL</span>
+                  <span class="stat-value" id="lobby-map-type">AWAITING...</span>
+                </div>
+              </div>
+              <div class="stat-divider"></div>
+              <div class="stat-item">
+                <div class="stat-icon"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <div class="stat-content">
+                  <span class="stat-label">OPERADORES</span>
+                  <span class="stat-value" id="lobby-players">0</span>
+                </div>
+              </div>
+            </div>
 
-          <div class="os-footer">
-            <span>SECURE LINK: ENCRYPTED</span>
-            <span id="os-status">SERVER: <b>OFFLINE</b></span>
+            <div class="os-login">
+              <span class="os-label">OPERATIVE_ID //</span>
+              <div class="os-input-wrapper">
+                <div class="input-decor-top"></div>
+                <div class="input-decor-bottom"></div>
+                <div class="os-input-box">
+                  <span class="os-prefix">></span>
+                  <input type="text" id="nickname" value="Operador" autocomplete="off" spellcheck="false" maxlength="12" />
+                  <div class="os-cursor"></div>
+                </div>
+              </div>
+
+              <button id="btn-enter" class="os-btn" disabled>
+                <div class="btn-glint"></div>
+                <span id="btn-enter-label">ESTABELECENDO LINK</span>
+                <svg class="btn-icon" viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+            </div>
+            
+            <div class="os-footer">
+              <span class="footer-badge">SYS_READY_v7.2</span>
+              <span id="os-status" class="status-badge offline">SERVER: OFFLINE</span>
+            </div>
           </div>
         </div>
       </div>
